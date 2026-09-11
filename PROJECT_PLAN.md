@@ -4,10 +4,10 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Phase roadmap
 
-- [x] **Phase 0** — Project definition, repository scaffold, foundational docs *(in progress)*
-- [ ] **Phase 1** — Development environment verification (Python, Node.js, Git, Docker Desktop, VS Code)
-- [ ] **Phase 2** — MQTT broker (Mosquitto) proven working with a minimal publisher/subscriber
-- [ ] **Phase 3** — First simulated sensor (SENSOR-001 only): connect, generate, publish, stop cleanly
+- [x] **Phase 0** — Project definition, repository scaffold, foundational docs
+- [~] **Phase 1** — Development environment verification (Python, Node.js, Git, Docker Desktop, VS Code) *(partially confirmed: Python 3.12.6, Docker 29.7.2 verified working; Node.js/Git not yet checked)*
+- [x] **Phase 2** — MQTT broker (Mosquitto) proven working with a minimal publisher/subscriber
+- [ ] **Phase 3** — First simulated sensor (SENSOR-001 only): connect, generate, publish, stop cleanly *(next)*
 - [ ] **Phase 4** — Sensor data generator (temperature, humidity, pressure, light, battery)
 - [ ] **Phase 5** — Sensor MQTT publisher (telemetry topic + payload)
 - [ ] **Phase 6** — MQTT receiver (subscribes to `iot/sensors/+/telemetry`)
@@ -45,4 +45,6 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 0 in progress** — repository scaffold, `.gitignore`, top-level folders, README, PROJECT_PLAN, and foundational docs (requirements, architecture, sensor behavior, MQTT topics, database structure, testing strategy) are being created. No application code yet — that begins in Phase 2 (MQTT broker) after Phase 1 environment verification.
+**Phase 2 complete.** Mosquitto broker runs in Docker (`docker/mosquitto/mosquitto.conf`), proven working end to end with `scripts/mqtt_poc_publisher.py` and `scripts/mqtt_poc_subscriber.py` — see [docs/mqtt/topics.md](docs/mqtt/topics.md#phase-2-verification-mqtt-broker-proven-working) for details. Project virtual environment (`.venv`) created with `paho-mqtt` installed.
+
+Next: **Phase 3** — build the first real simulated sensor (SENSOR-001), replacing the throwaway PoC scripts.
