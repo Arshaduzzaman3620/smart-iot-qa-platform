@@ -3,6 +3,8 @@ import time
 
 from config import settings
 from mqtt.mqtt_client import MQTTSubscriber
+from parser.message_parser import MessageParser, ParseError
+from validator.telemetry_validator import TelemetryValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("receiver")
@@ -11,9 +13,20 @@ TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
 
 
 def on_message(client, userdata, msg):
-    # Phase 6 scope only: log what arrives, as-is. No parsing/validation/
-    # storage yet -- that's Phase 7 (validator) and Phase 9 (MySQL writes).
-    logger.info("Received on %s: %s", msg.topic, msg.payload.decode(errors="replace"))
+    # Receiver never trusts incoming data: parse first, then validate.
+    # No storage yet -- that's Phase 9 (MySQL writes).
+    try:
+        data = MessageParser.parse(msg.payload)
+    except ParseError as exc:
+        logger.warning("Rejected message on %s: %s (raw=%r)", msg.topic, exc, msg.payload[:200])
+        return
+
+    errors = TelemetryValidator.validate(data)
+    if errors:
+        logger.warning("Rejected message on %s: %s", msg.topic, "; ".join(errors))
+        return
+
+    logger.info("Accepted telemetry on %s: %s", msg.topic, data)
 
 
 def main():
