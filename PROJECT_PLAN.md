@@ -7,11 +7,9 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 0** — Project definition, repository scaffold, foundational docs
 - [~] **Phase 1** — Development environment verification (Python, Node.js, Git, Docker Desktop, VS Code) *(partially confirmed: Python 3.12.6, Docker 29.7.2 verified working; Node.js/Git not yet checked)*
 - [x] **Phase 2** — MQTT broker (Mosquitto) proven working with a minimal publisher/subscriber
-- [ ] **Phase 3** — First simulated sensor (SENSOR-001 only): connect, generate, publish, stop cleanly *(next)*
-- [ ] **Phase 4** — Sensor data generator (temperature, humidity, pressure, light, battery)
-- [ ] **Phase 5** — Sensor MQTT publisher (telemetry topic + payload)
-- [ ] **Phase 6** — MQTT receiver (subscribes to `iot/sensors/+/telemetry`)
-- [ ] **Phase 7** — Telemetry validation (parser + validator, reject invalid messages)
+- [x] **Phase 3** — First simulated sensor (SENSOR-001): connect, generate realistic telemetry, publish, reconnect on failure, stop cleanly *(includes Phase 4/5 scope — data generator and MQTT publisher were built together as one working sensor, not separately)*
+- [x] **Phase 6** — MQTT receiver (subscribes to `iot/sensors/+/telemetry`)
+- [ ] **Phase 7** — Telemetry validation (parser + validator, reject invalid messages) *(next)*
 - [ ] **Phase 8** — MySQL database (`smart_iot`: sensors, telemetry, alerts tables)
 - [ ] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL)
 - [ ] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
@@ -45,6 +43,14 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 2 complete.** Mosquitto broker runs in Docker (`docker/mosquitto/mosquitto.conf`), proven working end to end with `scripts/mqtt_poc_publisher.py` and `scripts/mqtt_poc_subscriber.py` — see [docs/mqtt/topics.md](docs/mqtt/topics.md#phase-2-verification-mqtt-broker-proven-working) for details. Project virtual environment (`.venv`) created with `paho-mqtt` installed.
+**Phase 6 complete.** `receiver/` subscribes to `iot/sensors/+/telemetry` and logs every message received, with the same separated structure as the simulator: `mqtt/` (subscribe/reconnect wrapper), `config/` (`.env`-driven settings), `main.py` (wiring + log-only message handler). No parsing/validation/storage yet — that's Phase 7 (validator) and Phase 9 (MySQL writes). Verified (manually, broker running in Docker):
+- Positive: receiver connects, subscribes, and logs the exact telemetry published live by `sensor-simulator` (SENSOR-001) — payload matches byte-for-byte.
+- Positive (wildcard): subscription uses `+` for the sensor ID segment, confirmed by publishing under a second, unrelated sensor ID and seeing it received without a code change.
+- Negative: malformed JSON and an empty payload are both logged as received raw text — the receiver does not crash or drop the connection (expected at this phase, since no parsing/validation is implemented yet).
+- Reliability: stopped and restarted the Mosquitto container while the receiver was running — it logged the disconnect, did not crash or exit, and automatically reconnected and re-subscribed once the broker came back, resuming message receipt with no restart needed.
 
-Next: **Phase 3** — build the first real simulated sensor (SENSOR-001), replacing the throwaway PoC scripts.
+Next: **Phase 7** — Telemetry validation: a parser + validator that rejects messages with missing required fields, invalid JSON, or out-of-range values (see [sensor-behavior.md](docs/architecture/sensor-behavior.md) for the valid ranges), logging rejections instead of passing them through.
+
+**Phase 3 (previous).** `sensor-simulator/` implements SENSOR-001 with separated responsibilities per the architecture doc: `sensors/` (identity/state), `generator/` (realistic gradual-drift values within the documented ranges), `mqtt/` (connect/publish/reconnect), `config/` (`.env`-driven settings). Verified:
+- Positive: connects to Mosquitto, publishes valid telemetry matching the required schema every `SENSOR_INTERVAL` seconds, values drift realistically instead of jumping, subscriber receives every message.
+- Negative/reliability: found and fixed a crash-on-startup bug when the broker is unreachable (blocking `connect()` raised `ConnectionRefusedError`); switched to `connect_async` + made `publish()` fail soft (log + skip) instead of raising. Verified the sensor keeps running with the broker down, and auto-reconnects and resumes publishing once the broker comes back — no restart needed.
