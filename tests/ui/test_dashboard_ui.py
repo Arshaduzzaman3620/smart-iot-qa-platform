@@ -105,6 +105,13 @@ def test_keeps_last_data_on_failure_and_recovers(open_dashboard, mock_sensors_ap
     expect(row(page, "SENSOR-002")).to_be_visible()
 
 
+def test_renders_100_sensors(open_dashboard, mock_sensors_api):
+    mock_sensors_api([sensor(f"SENSOR-{i:03d}", temperature=20 + i / 10) for i in range(1, 101)])
+    page = open_dashboard()
+    expect(page.get_by_test_id("sensor-table").locator("tbody tr")).to_have_count(100)
+    expect(row(page, "SENSOR-100").get_by_test_id("temperature")).to_have_text("30.0 °C")
+
+
 def test_no_horizontal_page_scroll_on_phone_width(open_dashboard, mock_sensors_api, page):
     page.set_viewport_size({"width": 375, "height": 700})
     mock_sensors_api([sensor()])

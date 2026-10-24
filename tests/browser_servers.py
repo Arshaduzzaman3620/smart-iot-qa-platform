@@ -24,9 +24,9 @@ def _stop(process: subprocess.Popen):
     process.wait(timeout=10)
 
 
-def _serve(name: str, port: int, command: list[str], cwd, log_dir):
+def _serve(name: str, host: str, port: int, command: list[str], cwd, log_dir):
     """Yield once `port` is serving. Reuses a server that is already running (e.g. your own dev server)."""
-    if port_open("localhost", port):
+    if port_open(host, port):
         yield
         return
     log_path = log_dir / f"{name}.log"
@@ -34,7 +34,7 @@ def _serve(name: str, port: int, command: list[str], cwd, log_dir):
         process = subprocess.Popen(command, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
                                    env={**os.environ, "PYTHONUNBUFFERED": "1"})
         try:
-            wait_until(lambda: port_open("localhost", port) or process.poll() is not None, timeout=60)
+            wait_until(lambda: port_open(host, port) or process.poll() is not None, timeout=60)
             if process.poll() is not None:
                 pytest.fail(f"{name} exited early:\n{log_path.read_text(encoding='utf-8')}")
             yield
@@ -47,11 +47,12 @@ def dashboard_server(tmp_path_factory):
     if not (ROOT / "frontend" / "node_modules").exists():
         pytest.skip("frontend dependencies not installed (run npm install in frontend/)")
     npx = "npx.cmd" if os.name == "nt" else "npx"
-    yield from _serve("vite", DASHBOARD_PORT, [npx, "vite", "--port", str(DASHBOARD_PORT), "--strictPort"],
+    yield from _serve("vite", "localhost", DASHBOARD_PORT, [npx, "vite", "--port", str(DASHBOARD_PORT), "--strictPort"],
                       ROOT / "frontend", tmp_path_factory.mktemp("vite"))
 
 
 @pytest.fixture(scope="session")
 def api_server(mysql_available, tmp_path_factory):
-    yield from _serve("api", API_PORT, [sys.executable, "-m", "backend.app.main"], ROOT,
+    # The API binds IPv4 only; 127.0.0.1 skips the slow IPv6 attempt "localhost" makes on Windows.
+    yield from _serve("api", "127.0.0.1", API_PORT, [sys.executable, "-m", "backend.app.main"], ROOT,
                       tmp_path_factory.mktemp("api"))

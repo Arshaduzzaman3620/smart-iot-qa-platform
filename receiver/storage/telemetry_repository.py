@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, or_, update
 from sqlalchemy.dialects.mysql import insert
 
 from database.models import Sensor, Telemetry
@@ -22,7 +22,8 @@ class TelemetryRepository:
         self._session_factory = session_factory
 
     def save(self, data: dict) -> int:
-        """Upsert the sensor's latest state and append one telemetry row, atomically. Returns the telemetry id."""
+        """Upsert the sensor's state, append one telemetry row, and advance the sensor's latest-reading
+        pointer, atomically. Returns the telemetry id."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # INSERT ... ON DUPLICATE KEY UPDATE: a first-seen sensor is registered automatically,
@@ -52,4 +53,12 @@ class TelemetryRepository:
             session.execute(upsert)
             session.add(telemetry)
             session.flush()
+            # Move the sensor's latest-reading pointer forward -- never back, so a delayed
+            # (out-of-order) message can't replace a newer reading on the dashboard.
+            session.execute(
+                update(Sensor)
+                .where(Sensor.sensor_id == data["sensor_id"])
+                .where(or_(Sensor.latest_reading_at.is_(None), Sensor.latest_reading_at <= telemetry.timestamp))
+                .values(latest_telemetry_id=telemetry.id, latest_reading_at=telemetry.timestamp)
+            )
             return telemetry.id
