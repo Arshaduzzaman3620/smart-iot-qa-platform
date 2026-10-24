@@ -1,0 +1,39 @@
+# Local infrastructure for development: MQTT broker + MySQL.
+# Run from the repo root:  docker compose -f docker/docker-compose.yml up -d
+# Credentials come from the repo-root .env (never committed); see .env.example.
+name: smart-iot
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: smart-iot-mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    container_name: smart-iot-mysql
+    # The official image reads MYSQL_DATABASE / MYSQL_USER / MYSQL_PASSWORD from here
+    # and creates that database and user on first start.
+    env_file: ../.env
+    environment:
+      # Root is never used by the app, so it gets a random password nobody needs to know.
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    ports:
+      # Host port 3307 so it doesn't collide with a locally installed MySQL on 3306.
+      # Host-run Python (receiver, init_db) therefore uses MYSQL_PORT=3307 in .env.
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

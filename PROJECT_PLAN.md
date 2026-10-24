@@ -10,8 +10,8 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 3** — First simulated sensor (SENSOR-001): connect, generate realistic telemetry, publish, reconnect on failure, stop cleanly *(includes Phase 4/5 scope — data generator and MQTT publisher were built together as one working sensor, not separately)*
 - [x] **Phase 6** — MQTT receiver (subscribes to `iot/sensors/+/telemetry`)
 - [x] **Phase 7** — Telemetry validation (parser + validator, reject invalid messages)
-- [ ] **Phase 8** — MySQL database (`smart_iot`: sensors, telemetry, alerts tables) *(next)*
-- [ ] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL)
+- [x] **Phase 8** — MySQL database (`smart_iot`: sensors, telemetry, alerts tables)
+- [ ] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL) *(next)*
 - [ ] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
 - [ ] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
 - [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
@@ -30,7 +30,7 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [ ] Errors handled
 - [ ] Logs added
 - [ ] Documentation updated
-- [ ] Ready to commit (owner commits, pushes, and merges)
+- [ ] Committed, pushed to `test-phase`, pull request opened
 
 ## Workflow per phase
 
@@ -38,12 +38,20 @@ This project is built **one phase at a time**. A phase is not started until the 
 2. Verify manually (run it, see the expected result).
 3. Add positive and negative tests where applicable.
 4. Update relevant docs under `docs/`.
-5. When the phase is finished, it's reported as ready — commit, branch, push, PR, and merge are all done by the repo owner, not automated.
+5. When the phase is finished: commit, push to `test-phase`, and open a pull request into `main` (the owner reviews and merges).
 6. Check this file's roadmap box, move to the next phase.
 
 ## Current status
 
-**Phase 7 complete.** `receiver/` now parses and validates every message before accepting it, per the architecture principle "the receiver never trusts incoming data": `parser/message_parser.py` (`MessageParser` — decodes UTF-8, parses JSON, confirms it's an object; raises `ParseError` otherwise, no validation logic) and `validator/telemetry_validator.py` (`TelemetryValidator` — checks all required fields present, correct non-bool numeric types, and within the ranges from [sensor-behavior.md](docs/architecture/sensor-behavior.md); returns a list of error strings, empty = valid). `main.py`'s message handler now parses, then validates, then logs either `Accepted telemetry ...` or `Rejected message ...` with the reason(s) — still no database write, that's Phase 9. Verified (manually, broker in Docker, simulator running live):
+**Phase 8 complete.** MySQL 8.4 runs in Docker via `docker/docker-compose.yml`, which also defines the Mosquitto broker. The database and app user come from `.env`, and root gets a random password. Host port is 3307 to avoid clashing with a locally installed MySQL. The new shared `database/` package is used by the receiver (Phase 9) and later the API (Phase 10). It contains `models.py` (SQLAlchemy 2.0 models for `sensors`, `telemetry`, `alerts` per [database.md](docs/architecture/database.md)), `session.py` (engine + `SessionLocal`, with `pool_pre_ping` for MySQL restarts), `config.py` (`.env`-driven), and `init_db.py` (`python -m database.init_db`, which creates missing tables, is safe to re-run, and never logs the password). The receiver still doesn't write to the database. Verified against the live container:
+- Positive: schema created and the DDL inspected in MySQL. A re-run is a no-op. A sensor + telemetry + alert insert reads back with every value exact, and the defaults (`status=OFFLINE`, `sensor_type=ENVIRONMENT`, alert `status=ACTIVE`, `created_at`/`received_at`) are applied, including on raw SQL inserts. `updated_at` changes on update.
+- Boundary: every documented min/max range value is stored and read back exactly. Verification initially caught single-precision `FLOAT` columns, which would alter values like `99999.99`, and they were switched to `DOUBLE`.
+- Negative: duplicate `sensor_id`, telemetry/alert for an unknown sensor (FK), telemetry missing a reading (NOT NULL), and a sensor with no `sensor_id` are each rejected by the database. Deleting a sensor cascades to its telemetry and alerts.
+- Error handling: with MySQL stopped, `init_db` logs a clear connection error and exits 1, with no traceback and no secrets.
+
+Next: **Phase 9**. The receiver writes validated telemetry into MySQL: it upserts the `sensors` row (status `ONLINE`, `last_seen`, `battery`) and inserts a `telemetry` row, for the first full flow sensor → MQTT → receiver → validate → MySQL.
+
+**Phase 7 (previous).** `receiver/` now parses and validates every message before accepting it, per the architecture principle "the receiver never trusts incoming data": `parser/message_parser.py` (`MessageParser` — decodes UTF-8, parses JSON, confirms it's an object; raises `ParseError` otherwise, no validation logic) and `validator/telemetry_validator.py` (`TelemetryValidator` — checks all required fields present, correct non-bool numeric types, and within the ranges from [sensor-behavior.md](docs/architecture/sensor-behavior.md); returns a list of error strings, empty = valid). `main.py`'s message handler now parses, then validates, then logs either `Accepted telemetry ...` or `Rejected message ...` with the reason(s) — still no database write, that's Phase 9. Verified (manually, broker in Docker, simulator running live):
 - Positive: valid telemetry from `sensor-simulator` logged as accepted.
 - Negative: invalid JSON, a message missing a required field (`battery`), an out-of-range value (`temperature=999`), and a wrong type (`humidity` as a string) were each rejected with a clear, specific reason; receiver kept running after every one.
 - Boundary: a message with every field set to its exact min/max (`temperature=-40`, `humidity=100`, `pressure=1100`, `light=100000`, `battery=0`) was correctly accepted — confirms the range checks are inclusive, not off-by-one.
