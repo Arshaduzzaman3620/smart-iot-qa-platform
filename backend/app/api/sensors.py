@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database.models import Sensor, Telemetry
 
 from ..deps import get_db
-from ..schemas import SensorOut, TelemetryOut
+from ..schemas import SensorOut, SensorWithLatestOut, TelemetryOut
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
@@ -17,9 +17,22 @@ def _get_sensor_or_404(db: Session, sensor_id: str) -> Sensor:
     return sensor
 
 
-@router.get("", response_model=list[SensorOut])
+@router.get("", response_model=list[SensorWithLatestOut])
 def list_sensors(db: Session = Depends(get_db)):
-    return db.scalars(select(Sensor).order_by(Sensor.sensor_id)).all()
+    sensors = db.scalars(select(Sensor).order_by(Sensor.sensor_id)).all()
+
+    # Latest reading per sensor in one query (highest id = most recently stored), instead of
+    # one query per sensor -- the dashboard polls this endpoint for every sensor at once.
+    latest_ids = select(func.max(Telemetry.id)).group_by(Telemetry.sensor_id)
+    latest = {t.sensor_id: t for t in db.scalars(select(Telemetry).where(Telemetry.id.in_(latest_ids)))}
+
+    items = []
+    for sensor in sensors:
+        item = SensorWithLatestOut.model_validate(sensor)
+        if sensor.sensor_id in latest:
+            item.latest_telemetry = TelemetryOut.model_validate(latest[sensor.sensor_id])
+        items.append(item)
+    return items
 
 
 @router.get("/{sensor_id}", response_model=SensorOut)

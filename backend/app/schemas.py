@@ -42,6 +42,12 @@ class TelemetryOut(_UTCModel):
     received_at: datetime
 
 
+class SensorWithLatestOut(SensorOut):
+    """List view for the dashboard: sensor state plus its most recent reading (None if it has none yet)."""
+
+    latest_telemetry: TelemetryOut | None = None
+
+
 class HealthOut(BaseModel):
     status: str
     database: str

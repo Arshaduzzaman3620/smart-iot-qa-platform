@@ -64,7 +64,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 10 — FastAPI backend** is complete: sensor → MQTT → receiver → validate → MySQL → REST API. Next is Phase 11: the web dashboard. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 11 — web dashboard** is complete: sensor → MQTT → receiver → validate → MySQL → REST API → React dashboard. Next is Phase 12: full manual E2E verification. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
 
 ## Documentation
 
@@ -74,4 +74,5 @@ Currently: **Phase 10 — FastAPI backend** is complete: sensor → MQTT → rec
 - [MQTT topic design](docs/mqtt/topics.md)
 - [Database structure](docs/architecture/database.md)
 - [REST API](docs/api/endpoints.md)
+- [Web dashboard](docs/frontend/dashboard.md)
 - [Testing strategy](docs/testing/strategy.md)
