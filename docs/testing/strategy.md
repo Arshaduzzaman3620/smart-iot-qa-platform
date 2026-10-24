@@ -31,6 +31,6 @@ Every validated input path (telemetry, sensor create/update, auth) must have neg
 
 ## Test data
 
-Reusable fixtures under `tests/test-data/`: `valid_sensors.json`, `invalid_sensors.json`, `telemetry.json`, `users.json`, `firmware.json` — created when test automation begins (Phase 13), not before.
+Reusable fixtures under `tests/test-data/`. `telemetry.json` (validator cases) exists since Phase 13. `valid_sensors.json`, `invalid_sensors.json`, `users.json`, and `firmware.json` are added with the features that need them (Phase 15). How to run and extend the suite: [automation.md](automation.md).
 
 Automation is not written until the underlying feature works manually — see [PROJECT_PLAN.md](../../PROJECT_PLAN.md) workflow.
