@@ -1,0 +1,35 @@
+{
+  "_comment": "Validator cases. Ranges from docs/architecture/sensor-behavior.md. 'patch' is applied on top of a valid message; null removes the field.",
+  "valid": [
+    {"name": "typical reading", "patch": {}},
+    {"name": "all minimums", "patch": {"temperature": -40, "humidity": 0, "pressure": 300, "light": 0, "battery": 0}},
+    {"name": "all maximums", "patch": {"temperature": 85, "humidity": 100, "pressure": 1100, "light": 100000, "battery": 100}},
+    {"name": "integers accepted", "patch": {"temperature": 20, "humidity": 50}},
+    {"name": "timestamp with offset", "patch": {"timestamp": "2026-10-24T21:00:00+09:00"}},
+    {"name": "timestamp without zone", "patch": {"timestamp": "2026-10-24T12:00:00"}},
+    {"name": "extra fields ignored", "patch": {"firmware": "1.0.0"}}
+  ],
+  "invalid": [
+    {"name": "temperature below min", "patch": {"temperature": -40.01}, "error": "temperature=-40.01 out of range"},
+    {"name": "temperature above max", "patch": {"temperature": 85.01}, "error": "temperature=85.01 out of range"},
+    {"name": "humidity below min", "patch": {"humidity": -0.1}, "error": "humidity=-0.1 out of range"},
+    {"name": "humidity above max", "patch": {"humidity": 100.1}, "error": "humidity=100.1 out of range"},
+    {"name": "pressure below min", "patch": {"pressure": 299.9}, "error": "pressure=299.9 out of range"},
+    {"name": "pressure above max", "patch": {"pressure": 1100.1}, "error": "pressure=1100.1 out of range"},
+    {"name": "light below min", "patch": {"light": -1}, "error": "light=-1 out of range"},
+    {"name": "light above max", "patch": {"light": 100000.1}, "error": "light=100000.1 out of range"},
+    {"name": "battery below min", "patch": {"battery": -0.01}, "error": "battery=-0.01 out of range"},
+    {"name": "battery above max", "patch": {"battery": 100.01}, "error": "battery=100.01 out of range"},
+    {"name": "humidity as string", "patch": {"humidity": "45"}, "error": "humidity must be a number, got str"},
+    {"name": "battery as bool", "patch": {"battery": true}, "error": "battery must be a number, got bool"},
+    {"name": "light as list", "patch": {"light": [1]}, "error": "light must be a number, got list"},
+    {"name": "missing sensor_id", "patch": {"sensor_id": null}, "error": "missing required field: sensor_id"},
+    {"name": "missing timestamp", "patch": {"timestamp": null}, "error": "missing required field: timestamp"},
+    {"name": "missing temperature", "patch": {"temperature": null}, "error": "missing required field: temperature"},
+    {"name": "missing battery", "patch": {"battery": null}, "error": "missing required field: battery"},
+    {"name": "empty sensor_id", "patch": {"sensor_id": ""}, "error": "sensor_id must be a non-empty string"},
+    {"name": "numeric sensor_id", "patch": {"sensor_id": 1}, "error": "sensor_id must be a non-empty string"},
+    {"name": "timestamp not ISO", "patch": {"timestamp": "yesterday"}, "error": "is not ISO 8601"},
+    {"name": "timestamp as number", "patch": {"timestamp": 1729771200}, "error": "timestamp must be a non-empty string"}
+  ]
+}

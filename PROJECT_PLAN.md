@@ -15,8 +15,8 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
 - [x] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
 - [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
-- [ ] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E) *(next)*
-- [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
+- [x] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
+- [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100) *(next)*
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
@@ -43,7 +43,21 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 12 complete.** The full pipeline was verified by hand, tracing the same readings through simulator → receiver → MySQL → API → dashboard. Runbook and recorded results: [docs/testing/e2e-manual-verification.md](docs/testing/e2e-manual-verification.md).
+**Phase 13 complete.** 120 automated tests across six layers, one command (`pytest`, ~1 min). Guide: [docs/testing/automation.md](docs/testing/automation.md).
+- unit (60): parser, validator (every boundary ±0.01 from `tests/test-data/telemetry.json`), data generator, UTC handling.
+- api (29): every endpoint with positive, boundary, and negative cases, plus a 503 when the DB is down.
+- mqtt (5): round trip, wildcard, ordering.
+- integration (13): the real `receiver/main.py` process, from broker to MySQL.
+- ui (10): Playwright in installed Chrome with the API mocked; every dashboard state.
+- e2e (3): MQTT message to rendered dashboard.
+- Isolation: unique `TEST-*` sensor IDs, purged before and after the session, so it is safe against the dev DB. Session fixtures are registered once (`pytest_plugins`) so only one receiver ever runs. Browser tests reuse running servers or start and stop their own.
+- Missing MySQL/broker → skipped with a reason. `REQUIRE_SERVICES=1` makes that a failure (for CI).
+- Verified the suite catches regressions: widening the validator's temperature max (85 → 86) failed 3 tests in 3 layers. Verified the full run leaves no servers running and no TEST rows behind.
+- Flaky-test fixes made while building: MQTT tests now wait for the broker's SUBACK before publishing, and the relative-time UI test freezes the browser clock.
+
+Next: **Phase 14**: scale to multiple sensors (5 → 10 → 50 → 100). The simulator runs N sensors, and receiver, DB, API, and dashboard behaviour are checked at each step.
+
+**Phase 12 (previous).** The full pipeline was verified by hand, tracing the same readings through simulator → receiver → MySQL → API → dashboard. Runbook and recorded results: [docs/testing/e2e-manual-verification.md](docs/testing/e2e-manual-verification.md).
 - Happy path: 5/5 readings published and stored. Every value is identical in the simulator log, receiver log, MySQL, and API. The dashboard shows the latest reading rounded to 1 dp, as designed.
 - Negative path: out-of-range, wrong-type, and non-UTF-8 messages from brand-new sensors were rejected by the receiver, so those sensors are 404 in the API and absent from the dashboard. A valid new sensor appeared within one refresh, with its low battery highlighted.
 - Reliability: the receiver auto-reconnected and resubscribed after a broker restart, and 11/11 later readings were stored. The simulator started with the broker down keeps running and resumes once it connects.
