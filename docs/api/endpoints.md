@@ -17,7 +17,7 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 | Method | Path | Success | Errors |
 |---|---|---|---|
 | GET | `/health` | `200 {"status":"ok","database":"ok"}` | `503 {"status":"degraded","database":"unavailable"}` |
-| GET | `/sensors` | `200` list of sensors, sorted by `sensor_id` | `503` DB down |
+| GET | `/sensors` | `200` list of sensors, sorted by `sensor_id`, each with `latest_telemetry` | `503` DB down |
 | GET | `/sensors/{sensor_id}` | `200` one sensor | `404 {"detail":"Sensor X not found"}`, `503` |
 | GET | `/sensors/{sensor_id}/telemetry?limit=N` | `200` readings, newest first | `404` unknown sensor, `422` limit outside 1–1000 or not an integer, `503` |
 
@@ -32,6 +32,8 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
   "last_seen": "2026-10-24T12:41:41Z", "created_at": "2026-10-24T12:29:18Z", "updated_at": "2026-10-24T12:41:41Z"
 }
 ```
+
+`GET /sensors` items also carry `latest_telemetry`: the sensor's most recently stored reading (Telemetry object below), or `null` if it has none. It is fetched for all sensors in one query, so the dashboard needs a single request per refresh.
 
 ### Telemetry
 

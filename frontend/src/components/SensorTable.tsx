@@ -1,0 +1,60 @@
+import { formatNumber, formatRelative } from "../format";
+import type { Sensor } from "../types";
+
+const LOW_BATTERY = 20;
+
+interface Props {
+  sensors: Sensor[];
+  now: number;
+}
+
+export function SensorTable({ sensors, now }: Props) {
+  if (sensors.length === 0) {
+    return (
+      <p className="empty" data-testid="sensors-empty">
+        No sensors have reported yet. Start the sensor simulator and receiver.
+      </p>
+    );
+  }
+
+  return (
+    <div className="table-wrap">
+      <table data-testid="sensor-table">
+        <thead>
+          <tr>
+            <th scope="col">Sensor ID</th>
+            <th scope="col" className="num">Temperature</th>
+            <th scope="col" className="num">Humidity</th>
+            <th scope="col" className="num">Battery</th>
+            <th scope="col">Status</th>
+            <th scope="col">Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sensors.map((sensor) => {
+            const t = sensor.latest_telemetry;
+            const lowBattery = sensor.battery != null && sensor.battery < LOW_BATTERY;
+            return (
+              <tr key={sensor.sensor_id} data-testid={`sensor-row-${sensor.sensor_id}`}>
+                <td data-testid="sensor-id" className="mono">{sensor.sensor_id}</td>
+                <td data-testid="temperature" className="num">{formatNumber(t?.temperature, "°C")}</td>
+                <td data-testid="humidity" className="num">{formatNumber(t?.humidity, "%")}</td>
+                <td data-testid="battery" className={lowBattery ? "num low" : "num"}>
+                  {formatNumber(sensor.battery, "%")}
+                </td>
+                <td>
+                  <span data-testid="status" className={`badge badge-${sensor.status.toLowerCase()}`}>
+                    {sensor.status}
+                  </span>
+                </td>
+                <td data-testid="last-seen" title={sensor.last_seen ?? undefined}>
+                  {formatRelative(sensor.last_seen, now)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}

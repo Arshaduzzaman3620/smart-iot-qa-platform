@@ -13,8 +13,8 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 8** — MySQL database (`smart_iot`: sensors, telemetry, alerts tables)
 - [x] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL)
 - [x] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
-- [ ] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen) *(next)*
-- [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
+- [x] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
+- [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard) *(next)*
 - [ ] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
 - [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability
@@ -43,7 +43,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 10 complete.** A read-only FastAPI backend in `backend/app/` reads MySQL through the shared `database` package. Layout: `api/health.py`, `api/sensors.py` (routers), `schemas.py` (Pydantic response models; DB DATETIMEs are labelled UTC so JSON ends in `Z`), and `deps.py` (one session per request). `main.py` holds the app plus an `OperationalError` handler that turns DB outages into a clean `503`. Run with `python -m backend.app.main`, which reads `API_PORT` from `.env`. Endpoint reference: [docs/api/endpoints.md](docs/api/endpoints.md). Verified live (19/19 checks against the running API + MySQL):
+**Phase 11 complete.** React 18 + TypeScript dashboard (Vite) in `frontend/`, documented in [docs/frontend/dashboard.md](docs/frontend/dashboard.md). It shows a sensor table (ID, temperature, humidity, battery, status badge, relative last seen) that polls every 5 s through Vite's `/api` dev proxy to FastAPI. It has loading, empty, and error states, and keeps showing the last good data when the API or database fails. Every cell has a `data-testid` for Playwright. Backend change for it: `GET /sensors` now includes each sensor's `latest_telemetry`, fetched for all sensors in one query instead of one request per sensor. Verified with the full stack running (simulator, receiver, API, Vite) and headless-Chrome screenshots:
+- Positive: `tsc` strict type check and production build pass. The table rendered both sensors with their latest readings and refreshed live (SENSOR-001's "last seen" stayed within seconds while the simulator ran). The proxy response matched the API.
+- Negative: API stopped → "Cannot reach the API. Retrying…". MySQL stopped → "Database unavailable. Retrying…". After MySQL restarted, the table returned with no page reload.
+- Layout: at narrow widths the table scrolls inside its card and the page never scrolls horizontally. Light and dark themes follow the OS.
+- Regression: all 19 Phase 10 API checks still pass after the `/sensors` change.
+- Known limitation: a sensor that stops publishing still shows ONLINE (status is never set to OFFLINE). Offline detection is in Phase 15.
+
+Next: **Phase 12**: verify the complete first E2E flow manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard), checking the same values at every hop.
+
+**Phase 10 (previous).** A read-only FastAPI backend in `backend/app/` reads MySQL through the shared `database` package. Layout: `api/health.py`, `api/sensors.py` (routers), `schemas.py` (Pydantic response models; DB DATETIMEs are labelled UTC so JSON ends in `Z`), and `deps.py` (one session per request). `main.py` holds the app plus an `OperationalError` handler that turns DB outages into a clean `503`. Run with `python -m backend.app.main`, which reads `API_PORT` from `.env`. Endpoint reference: [docs/api/endpoints.md](docs/api/endpoints.md). Verified live (19/19 checks against the running API + MySQL):
 - Positive: `/health` → 200. `/sensors` returns every DB sensor, sorted, with fields equal to the DB rows. `/sensors/{id}` → 200. `/sensors/{id}/telemetry` returns every row newest-first with values identical to MySQL. With the receiver and simulator running, the API's newest reading equalled the simulator's last published payload, confirming sensor → MQTT → receiver → MySQL → API end to end.
 - Boundary: `limit=1` returns exactly the newest row. `limit=1000` → 200.
 - Negative: unknown sensor → 404 with a clear message (both endpoints). `limit` = 0 / 1001 / -5 / `abc` → 422. SQL-injection-style ID → 404 (parameterised query, no data leaked). Unknown route → 404. `POST /sensors` → 405.
