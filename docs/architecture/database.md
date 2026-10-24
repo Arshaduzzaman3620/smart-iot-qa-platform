@@ -48,6 +48,15 @@ Implementation notes:
 - `status` defaults to `OFFLINE` (sensors) and `ACTIVE` (alerts), and `sensor_type` defaults to `ENVIRONMENT`. These are database-side defaults, so raw SQL inserts get them too.
 - Indexes: `telemetry (sensor_id, timestamp)` for history queries, `alerts (sensor_id, status)` for active-alert lookups.
 
+## How the receiver writes
+
+For each accepted message, `receiver/storage/telemetry_repository.py` runs one transaction:
+
+1. Upsert `sensors` by `sensor_id`: insert if new (auto-registration), otherwise set `status=ONLINE`, `battery`, `last_seen` (receiver's UTC clock), and `updated_at`.
+2. Insert one `telemetry` row. `timestamp` is the sensor's ISO 8601 value converted to UTC. `received_at` is set by MySQL.
+
+All `DATETIME` columns hold UTC. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
+
 ## Running it locally
 
 ```bash

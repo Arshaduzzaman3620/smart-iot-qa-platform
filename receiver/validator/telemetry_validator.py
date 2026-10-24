@@ -1,3 +1,5 @@
+from datetime import datetime
+
 REQUIRED_FIELDS = ("sensor_id", "timestamp", "temperature", "humidity", "pressure", "light", "battery")
 
 # (min, max) per docs/architecture/sensor-behavior.md "Data ranges" table.
@@ -31,6 +33,11 @@ class TelemetryValidator:
 
         if not isinstance(data["timestamp"], str) or not data["timestamp"]:
             errors.append("timestamp must be a non-empty string")
+        else:
+            try:
+                datetime.fromisoformat(data["timestamp"])
+            except ValueError:
+                errors.append(f"timestamp {data['timestamp']!r} is not ISO 8601")
 
         for field, (low, high) in RANGES.items():
             value = data[field]
