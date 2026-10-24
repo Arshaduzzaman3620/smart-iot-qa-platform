@@ -32,6 +32,11 @@ def main():
     topic = f"iot/sensors/{sensor.sensor_id}/telemetry"
 
     mqtt_client.connect()
+    # connect() is asynchronous; without this the first reading is published before the
+    # connection exists and silently lost. Don't block forever -- if the broker is down,
+    # carry on and let the reconnect logic catch up.
+    if not mqtt_client.wait_until_connected(timeout=5):
+        logger.warning("Broker not reachable yet; continuing, readings are skipped until it connects")
     sensor.mark_online()
     logger.info("Sensor %s starting (interval=%ss)", sensor.sensor_id, settings.SENSOR_INTERVAL)
 
@@ -45,8 +50,10 @@ def main():
             sensor.touch()
 
             payload = build_telemetry(sensor)
-            mqtt_client.publish(topic, json.dumps(payload))
-            logger.info("Telemetry: %s", payload)
+            if mqtt_client.publish(topic, json.dumps(payload)):
+                logger.info("Telemetry sent: %s", payload)
+            else:
+                logger.warning("Telemetry dropped (not published): %s", payload)
 
             time.sleep(settings.SENSOR_INTERVAL)
     except KeyboardInterrupt:

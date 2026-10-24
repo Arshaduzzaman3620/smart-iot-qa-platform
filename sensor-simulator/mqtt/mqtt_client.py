@@ -1,4 +1,5 @@
 import logging
+import threading
 
 import paho.mqtt.client as mqtt
 
@@ -15,14 +16,17 @@ class MQTTClient:
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
         self._host = host
         self._port = port
+        self._connected = threading.Event()
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
             logger.info("Connected to MQTT broker %s:%s", self._host, self._port)
+            self._connected.set()
         else:
             logger.error("MQTT connection failed: %s", reason_code)
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
+        self._connected.clear()
         logger.warning("Disconnected from MQTT broker (reason_code=%s)", reason_code)
 
     def connect(self):
@@ -31,6 +35,10 @@ class MQTTClient:
         # at startup.
         self._client.connect_async(self._host, self._port, keepalive=60)
         self._client.loop_start()
+
+    def wait_until_connected(self, timeout: float) -> bool:
+        """Block until the first connection succeeds or `timeout` seconds pass. Returns True if connected."""
+        return self._connected.wait(timeout)
 
     def publish(self, topic: str, payload: str) -> bool:
         if not self._client.is_connected():
