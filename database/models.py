@@ -26,6 +26,12 @@ class Sensor(Base):
     firmware_version: Mapped[str | None] = mapped_column(String(20))
     battery: Mapped[float | None] = mapped_column(Double)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    # Pointer to the newest reading (by sensor timestamp), maintained by the receiver. Lets the
+    # sensor list fetch every sensor's latest reading by primary key instead of scanning telemetry,
+    # which grows by ~1.7M rows/day at 100 sensors. No FK: telemetry already references sensors,
+    # and a constraint in both directions would fight the ON DELETE CASCADE.
+    latest_telemetry_id: Mapped[int | None] = mapped_column(BigInteger)
+    latest_reading_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()

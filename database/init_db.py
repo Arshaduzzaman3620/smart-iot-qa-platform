@@ -1,4 +1,4 @@
-"""Create the smart_iot schema. Safe to re-run: existing tables are left untouched.
+"""Create the smart_iot schema and apply pending upgrades. Safe to re-run.
 
 Run from the repo root:  python -m database.init_db
 """
@@ -9,6 +9,7 @@ import sys
 from sqlalchemy import inspect
 from sqlalchemy.exc import OperationalError
 
+from .migrations import upgrade
 from .models import Base
 from .session import engine
 
@@ -17,8 +18,9 @@ logger = logging.getLogger("init_db")
 
 
 def init_db() -> list[str]:
-    """Create any missing tables and return the table names now present."""
+    """Create any missing tables, apply pending migrations, and return the table names now present."""
     Base.metadata.create_all(engine)
+    upgrade(engine)
     return sorted(inspect(engine).get_table_names())
 
 

@@ -36,6 +36,16 @@ Initial: `ONLINE`, `OFFLINE`, `ERROR`. Later: `CONNECTING`, `UPDATING`.
 | Light | 0 lux | 100000 lux |
 | Battery | 0 % | 100 % |
 
+## Running many sensors
+
+`SENSOR_COUNT` (default 1, max 1000) sets how many sensors the simulator runs: `SENSOR-001` … `SENSOR-NNN`, located in `Room-1` … `Room-N`. Each sensor:
+
+- has its own MQTT connection (client ID = sensor ID), like separate physical devices;
+- starts from different, valid readings (only when `SENSOR_COUNT > 1`; a single sensor keeps the original defaults);
+- publishes on a fixed schedule, with first publishes spread evenly across one interval so the fleet doesn't send in bursts.
+
+Stopping (Ctrl+C, SIGTERM, Ctrl+Break on Windows) finishes the current reading, disconnects every sensor cleanly, and logs `Simulator stopped`.
+
 ## Data generation logic
 
 1. Create a sensor.
