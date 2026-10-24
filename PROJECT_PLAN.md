@@ -14,8 +14,8 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL)
 - [x] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
 - [x] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
-- [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard) *(next)*
-- [ ] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
+- [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
+- [ ] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E) *(next)*
 - [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
@@ -43,7 +43,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 11 complete.** React 18 + TypeScript dashboard (Vite) in `frontend/`, documented in [docs/frontend/dashboard.md](docs/frontend/dashboard.md). It shows a sensor table (ID, temperature, humidity, battery, status badge, relative last seen) that polls every 5 s through Vite's `/api` dev proxy to FastAPI. It has loading, empty, and error states, and keeps showing the last good data when the API or database fails. Every cell has a `data-testid` for Playwright. Backend change for it: `GET /sensors` now includes each sensor's `latest_telemetry`, fetched for all sensors in one query instead of one request per sensor. Verified with the full stack running (simulator, receiver, API, Vite) and headless-Chrome screenshots:
+**Phase 12 complete.** The full pipeline was verified by hand, tracing the same readings through simulator → receiver → MySQL → API → dashboard. Runbook and recorded results: [docs/testing/e2e-manual-verification.md](docs/testing/e2e-manual-verification.md).
+- Happy path: 5/5 readings published and stored. Every value is identical in the simulator log, receiver log, MySQL, and API. The dashboard shows the latest reading rounded to 1 dp, as designed.
+- Negative path: out-of-range, wrong-type, and non-UTF-8 messages from brand-new sensors were rejected by the receiver, so those sensors are 404 in the API and absent from the dashboard. A valid new sensor appeared within one refresh, with its low battery highlighted.
+- Reliability: the receiver auto-reconnected and resubscribed after a broker restart, and 11/11 later readings were stored. The simulator started with the broker down keeps running and resumes once it connects.
+- Defects found and fixed: (1) the simulator lost its first reading on every start, because `connect()` is async; it now waits up to 5 s for the first connection via `MQTTClient.wait_until_connected()`. (2) The simulator logged readings as sent even when the publish was skipped; it now logs `Telemetry sent` or `Telemetry dropped`.
+- Known limitations carried forward to Phase 15: stale ONLINE status, no buffering during outages, sensor metadata not propagated.
+
+Next: **Phase 13**: test automation foundation. pytest unit tests (parser, validator, generator), API tests (httpx), MQTT/integration tests, and Playwright UI/E2E tests, automating the checks above.
+
+**Phase 11 (previous).** React 18 + TypeScript dashboard (Vite) in `frontend/`, documented in [docs/frontend/dashboard.md](docs/frontend/dashboard.md). It shows a sensor table (ID, temperature, humidity, battery, status badge, relative last seen) that polls every 5 s through Vite's `/api` dev proxy to FastAPI. It has loading, empty, and error states, and keeps showing the last good data when the API or database fails. Every cell has a `data-testid` for Playwright. Backend change for it: `GET /sensors` now includes each sensor's `latest_telemetry`, fetched for all sensors in one query instead of one request per sensor. Verified with the full stack running (simulator, receiver, API, Vite) and headless-Chrome screenshots:
 - Positive: `tsc` strict type check and production build pass. The table rendered both sensors with their latest readings and refreshed live (SENSOR-001's "last seen" stayed within seconds while the simulator ran). The proxy response matched the API.
 - Negative: API stopped → "Cannot reach the API. Retrying…". MySQL stopped → "Database unavailable. Retrying…". After MySQL restarted, the table returned with no page reload.
 - Layout: at narrow widths the table scrolls inside its card and the page never scrolls horizontally. Light and dark themes follow the OS.
