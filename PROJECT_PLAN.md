@@ -12,9 +12,9 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 7** — Telemetry validation (parser + validator, reject invalid messages)
 - [x] **Phase 8** — MySQL database (`smart_iot`: sensors, telemetry, alerts tables)
 - [x] **Phase 9** — Receiver writes validated telemetry into MySQL (first full data flow: sensor → MQTT → receiver → validate → MySQL)
-- [ ] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`) *(next)*
-- [ ] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
-- [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
+- [x] **Phase 10** — FastAPI backend (`/health`, `/sensors`, `/sensors/{id}`, `/sensors/{id}/telemetry`)
+- [x] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
+- [ ] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard) *(next)*
 - [ ] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
 - [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability
@@ -43,7 +43,24 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 9 complete.** First full data flow works: sensor → MQTT → receiver → parse → validate → MySQL. New `receiver/storage/telemetry_repository.py` (`TelemetryRepository.save`) runs one transaction per message. It upserts the `sensors` row with `INSERT ... ON DUPLICATE KEY UPDATE` (status `ONLINE`, `battery`, `last_seen`, `updated_at`), so a first-seen sensor is registered automatically and concurrent receivers can't race into a duplicate-key error. It then inserts the `telemetry` row, converting the ISO 8601 timestamp to naive UTC. `main.py` adds the repo root to `sys.path` so it can import the shared `database` package. Two validation additions: the validator now rejects a `timestamp` that isn't ISO 8601, and the receiver rejects a message whose `sensor_id` doesn't match its topic, so a sensor can only publish its own readings. Verified live (broker + MySQL via Docker Compose, simulator running):
+**Phase 11 complete.** React 18 + TypeScript dashboard (Vite) in `frontend/`, documented in [docs/frontend/dashboard.md](docs/frontend/dashboard.md). It shows a sensor table (ID, temperature, humidity, battery, status badge, relative last seen) that polls every 5 s through Vite's `/api` dev proxy to FastAPI. It has loading, empty, and error states, and keeps showing the last good data when the API or database fails. Every cell has a `data-testid` for Playwright. Backend change for it: `GET /sensors` now includes each sensor's `latest_telemetry`, fetched for all sensors in one query instead of one request per sensor. Verified with the full stack running (simulator, receiver, API, Vite) and headless-Chrome screenshots:
+- Positive: `tsc` strict type check and production build pass. The table rendered both sensors with their latest readings and refreshed live (SENSOR-001's "last seen" stayed within seconds while the simulator ran). The proxy response matched the API.
+- Negative: API stopped → "Cannot reach the API. Retrying…". MySQL stopped → "Database unavailable. Retrying…". After MySQL restarted, the table returned with no page reload.
+- Layout: at narrow widths the table scrolls inside its card and the page never scrolls horizontally. Light and dark themes follow the OS.
+- Regression: all 19 Phase 10 API checks still pass after the `/sensors` change.
+- Known limitation: a sensor that stops publishing still shows ONLINE (status is never set to OFFLINE). Offline detection is in Phase 15.
+
+Next: **Phase 12**: verify the complete first E2E flow manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard), checking the same values at every hop.
+
+**Phase 10 (previous).** A read-only FastAPI backend in `backend/app/` reads MySQL through the shared `database` package. Layout: `api/health.py`, `api/sensors.py` (routers), `schemas.py` (Pydantic response models; DB DATETIMEs are labelled UTC so JSON ends in `Z`), and `deps.py` (one session per request). `main.py` holds the app plus an `OperationalError` handler that turns DB outages into a clean `503`. Run with `python -m backend.app.main`, which reads `API_PORT` from `.env`. Endpoint reference: [docs/api/endpoints.md](docs/api/endpoints.md). Verified live (19/19 checks against the running API + MySQL):
+- Positive: `/health` → 200. `/sensors` returns every DB sensor, sorted, with fields equal to the DB rows. `/sensors/{id}` → 200. `/sensors/{id}/telemetry` returns every row newest-first with values identical to MySQL. With the receiver and simulator running, the API's newest reading equalled the simulator's last published payload, confirming sensor → MQTT → receiver → MySQL → API end to end.
+- Boundary: `limit=1` returns exactly the newest row. `limit=1000` → 200.
+- Negative: unknown sensor → 404 with a clear message (both endpoints). `limit` = 0 / 1001 / -5 / `abc` → 422. SQL-injection-style ID → 404 (parameterised query, no data leaked). Unknown route → 404. `POST /sensors` → 405.
+- Error handling: with MySQL stopped, `/health` → 503 `degraded` and `/sensors` → 503 `Database unavailable`, with no stack trace to the client. After MySQL restarted, both returned 200 with no API restart. The log has no secrets.
+
+Next: **Phase 11**: frontend dashboard (React + TypeScript): a sensor table with ID, temperature, humidity, battery, status, and last seen, fed by this API.
+
+**Phase 9 (previous).** First full data flow works: sensor → MQTT → receiver → parse → validate → MySQL. New `receiver/storage/telemetry_repository.py` (`TelemetryRepository.save`) runs one transaction per message. It upserts the `sensors` row with `INSERT ... ON DUPLICATE KEY UPDATE` (status `ONLINE`, `battery`, `last_seen`, `updated_at`), so a first-seen sensor is registered automatically and concurrent receivers can't race into a duplicate-key error. It then inserts the `telemetry` row, converting the ISO 8601 timestamp to naive UTC. `main.py` adds the repo root to `sys.path` so it can import the shared `database` package. Two validation additions: the validator now rejects a `timestamp` that isn't ISO 8601, and the receiver rejects a message whose `sensor_id` doesn't match its topic, so a sensor can only publish its own readings. Verified live (broker + MySQL via Docker Compose, simulator running):
 - Positive: every telemetry message the simulator published was stored, with all values identical to the published payload. `sensors` shows SENSOR-001 `ONLINE` with the latest battery and `last_seen`. A message from a never-seen SENSOR-002 auto-registered the sensor. A `+09:00` timestamp was stored as the correct UTC time.
 - Negative: non-ISO timestamp, `sensor_id`/topic mismatch, out-of-range temperature, and invalid JSON were each rejected with a specific reason. None reached the database.
 - Reliability: with MySQL stopped mid-run, the receiver logged `Failed to store telemetry ... Lost connection` and kept running. After MySQL restarted, the next message was stored with no receiver restart (`pool_pre_ping`). Known limitation: messages received while MySQL is down are dropped, not buffered. Buffering/retry belongs to the reliability work in Phase 15.
