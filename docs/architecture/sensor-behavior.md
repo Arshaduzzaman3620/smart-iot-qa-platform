@@ -26,6 +26,8 @@ Fields: `sensor_id`, `sensor_type`, `name`, `location`, `status`, `firmware_vers
 
 Initial: `ONLINE`, `OFFLINE`, `ERROR`. Later: `CONNECTING`, `UPDATING`.
 
+A sensor becomes `ONLINE` when the receiver stores a reading from it, and `OFFLINE` after `OFFLINE_TIMEOUT` seconds (default 30) with no stored reading. See [alerts.md](alerts.md).
+
 ## Data ranges (used for validation and boundary testing)
 
 | Field | Min | Max |

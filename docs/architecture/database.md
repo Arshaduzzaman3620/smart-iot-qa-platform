@@ -61,8 +61,11 @@ For each accepted message, `receiver/storage/telemetry_repository.py` runs one t
 1. Upsert `sensors` by `sensor_id`: insert if new (auto-registration), otherwise set `status=ONLINE`, `battery`, `last_seen` (receiver's UTC clock), and `updated_at`.
 2. Insert one `telemetry` row. `timestamp` is the sensor's ISO 8601 value converted to UTC. `received_at` is set by MySQL.
 3. Advance `sensors.latest_telemetry_id` / `latest_reading_at` to the new row, only if its timestamp is not older than the current latest. A delayed message stays in the history but never replaces a newer reading.
+4. Update `alerts` (Phase 15a): resolve the sensor's active `OFFLINE` alert, and, only if step 3 advanced the pointer, raise / escalate / resolve threshold alerts. See [alerts.md](alerts.md).
 
-All `DATETIME` columns hold UTC. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
+Separately, the receiver's offline check sets silent `ONLINE` sensors to `OFFLINE` and inserts their `OFFLINE` alerts.
+
+All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fractions itself, because MySQL would round them, which can put a time up to 0.5 s in the future. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
 
 ## Running it locally
 

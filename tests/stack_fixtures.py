@@ -25,7 +25,8 @@ def receiver_process(broker_available, mysql_available, clean_test_rows, tmp_pat
         cwd=ROOT / "receiver",
         stdout=log_file,
         stderr=subprocess.STDOUT,
-        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        # Check for silent sensors every second from the start; the 30 s timeout itself stays the default.
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "OFFLINE_CHECK_INTERVAL": "1", "OFFLINE_STARTUP_GRACE": "0"},
     )
 
     def log() -> str:

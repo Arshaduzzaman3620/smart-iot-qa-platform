@@ -1,18 +1,35 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.mysql import insert
 
-from database.models import Sensor, Telemetry
+from alerts.alert_service import OFFLINE, AlertChange, AlertService
+from database.models import Alert, Sensor, Telemetry
 from database.session import SessionLocal
 
 
+# MySQL DATETIME has whole seconds and *rounds* any fraction it is given (12:00:00.6 -> 12:00:01),
+# which can put a stored time up to 0.5 s in the future. Truncate before writing instead.
+
+
+def utc_now() -> datetime:
+    """Current UTC time, naive, whole seconds -- what a DATETIME column stores."""
+    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
 def _to_utc_naive(timestamp: str) -> datetime:
-    """ISO 8601 string -> naive UTC datetime (MySQL DATETIME has no timezone). Naive input is taken as UTC."""
+    """ISO 8601 string -> naive UTC datetime, whole seconds (MySQL DATETIME has no timezone). Naive input is taken as UTC."""
     parsed = datetime.fromisoformat(timestamp)
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-    return parsed
+    return parsed.replace(microsecond=0)
+
+
+@dataclass
+class SaveResult:
+    telemetry_id: int
+    alert_changes: list[AlertChange] = field(default_factory=list)
 
 
 class TelemetryRepository:
@@ -21,10 +38,10 @@ class TelemetryRepository:
     def __init__(self, session_factory=SessionLocal):
         self._session_factory = session_factory
 
-    def save(self, data: dict) -> int:
-        """Upsert the sensor's state, append one telemetry row, and advance the sensor's latest-reading
-        pointer, atomically. Returns the telemetry id."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+    def save(self, data: dict) -> SaveResult:
+        """Upsert the sensor's state, append one telemetry row, advance the sensor's latest-reading
+        pointer, and raise / escalate / resolve its alerts, atomically."""
+        now = utc_now()
 
         # INSERT ... ON DUPLICATE KEY UPDATE: a first-seen sensor is registered automatically,
         # and concurrent receivers can't race each other into a duplicate-key error.
@@ -55,10 +72,43 @@ class TelemetryRepository:
             session.flush()
             # Move the sensor's latest-reading pointer forward -- never back, so a delayed
             # (out-of-order) message can't replace a newer reading on the dashboard.
-            session.execute(
+            advanced = session.execute(
                 update(Sensor)
                 .where(Sensor.sensor_id == data["sensor_id"])
                 .where(or_(Sensor.latest_reading_at.is_(None), Sensor.latest_reading_at <= telemetry.timestamp))
                 .values(latest_telemetry_id=telemetry.id, latest_reading_at=telemetry.timestamp)
+            ).rowcount == 1
+            changes = self._update_alerts(session, data, advanced, now)
+            return SaveResult(telemetry.id, changes)
+
+    @staticmethod
+    def _update_alerts(session, data: dict, advanced: bool, now: datetime) -> list[AlertChange]:
+        # The upsert above holds this sensor's row lock until commit, so concurrent saves for the
+        # same sensor are serialized here and can't both raise the same alert.
+        active = {
+            alert.alert_type: alert
+            for alert in session.scalars(
+                select(Alert).where(Alert.sensor_id == data["sensor_id"], Alert.status == "ACTIVE")
             )
-            return telemetry.id
+        }
+
+        # Any message, even a late one, proves the sensor is back.
+        changes = [AlertChange("RESOLVE", OFFLINE)] if OFFLINE in active else []
+        # Thresholds are judged on the newest reading only; a delayed older reading must not
+        # raise or resolve anything.
+        if advanced:
+            changes += AlertService.evaluate(
+                data, {alert_type: a.severity for alert_type, a in active.items() if alert_type != OFFLINE}
+            )
+
+        for change in changes:
+            if change.action == "RAISE":
+                session.add(Alert(sensor_id=data["sensor_id"], alert_type=change.alert_type,
+                                  severity=change.severity, value=change.value, message=change.message))
+            elif change.action == "ESCALATE":
+                alert = active[change.alert_type]
+                alert.severity, alert.value, alert.message = change.severity, change.value, change.message
+            else:
+                alert = active[change.alert_type]
+                alert.status, alert.resolved_at = "RESOLVED", now
+        return changes

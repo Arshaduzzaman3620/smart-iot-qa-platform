@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database.models import Sensor, Telemetry
+from database.models import Alert, Sensor, Telemetry
 
 from ..deps import get_db
-from ..schemas import SensorOut, SensorWithLatestOut, TelemetryOut
+from ..schemas import AlertOut, SensorOut, SensorWithLatestOut, TelemetryOut
+from .alerts import AlertStatus, alerts_query
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
@@ -26,12 +27,17 @@ def list_sensors(db: Session = Depends(get_db)):
         .outerjoin(Telemetry, Telemetry.id == Sensor.latest_telemetry_id)
         .order_by(Sensor.sensor_id)
     ).all()
+    # Uses ix_alerts_sensor_status: cost follows the number of active alerts, not alert history.
+    active_alerts = dict(db.execute(
+        select(Alert.sensor_id, func.count()).where(Alert.status == "ACTIVE").group_by(Alert.sensor_id)
+    ).all())
 
     items = []
     for sensor, latest in rows:
         item = SensorWithLatestOut.model_validate(sensor)
         if latest is not None:
             item.latest_telemetry = TelemetryOut.model_validate(latest)
+        item.active_alerts = active_alerts.get(sensor.sensor_id, 0)
         items.append(item)
     return items
 
@@ -56,3 +62,14 @@ def get_sensor_telemetry(
         .limit(limit)
     ).all()
     return rows
+
+
+@router.get("/{sensor_id}/alerts", response_model=list[AlertOut])
+def get_sensor_alerts(
+    sensor_id: str,
+    status: AlertStatus | None = Query(None, description="ACTIVE or RESOLVED; omit for both"),
+    limit: int = Query(100, ge=1, le=1000, description="Max rows, newest first"),
+    db: Session = Depends(get_db),
+):
+    _get_sensor_or_404(db, sensor_id)
+    return db.scalars(alerts_query(status, limit, sensor_id)).all()
