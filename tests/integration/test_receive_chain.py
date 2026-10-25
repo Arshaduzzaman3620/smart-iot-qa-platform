@@ -111,6 +111,26 @@ def test_receiver_keeps_working_after_bad_messages(receiver_process, mqtt_publis
     assert "Traceback" not in receiver_process()
 
 
+def test_latest_reading_pointer_follows_newest_timestamp(mqtt_publisher, sensor_id):
+    mqtt_publisher(sensor_id, valid_telemetry(sensor_id, timestamp="2026-10-24T12:00:00Z", temperature=10.0))
+    mqtt_publisher(sensor_id, valid_telemetry(sensor_id, timestamp="2026-10-24T12:00:05Z", temperature=11.0))
+    rows = wait_until(lambda: len(telemetry_rows(sensor_id)) == 2 and telemetry_rows(sensor_id))
+
+    sensor = get_sensor(sensor_id)
+    assert sensor.latest_telemetry_id == rows[1].id
+    assert sensor.latest_reading_at == datetime(2026, 10, 24, 12, 0, 5)
+
+
+def test_late_message_does_not_replace_newer_latest_reading(mqtt_publisher, sensor_id):
+    mqtt_publisher(sensor_id, valid_telemetry(sensor_id, timestamp="2026-10-24T12:00:05Z", temperature=11.0))
+    # Arrives second but was taken earlier (e.g. delayed in a network buffer).
+    mqtt_publisher(sensor_id, valid_telemetry(sensor_id, timestamp="2026-10-24T12:00:00Z", temperature=10.0))
+    rows = wait_until(lambda: len(telemetry_rows(sensor_id)) == 2 and telemetry_rows(sensor_id))
+
+    newest = next(r for r in rows if r.temperature == 11.0)
+    assert get_sensor(sensor_id).latest_telemetry_id == newest.id  # history keeps both rows
+
+
 def test_boundary_values_are_accepted_end_to_end(mqtt_publisher, sensor_id):
     minimums = valid_telemetry(sensor_id, temperature=-40, humidity=0, pressure=300, light=0, battery=0)
     maximums = valid_telemetry(sensor_id, temperature=85, humidity=100, pressure=1100, light=100000, battery=100,

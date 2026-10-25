@@ -16,8 +16,8 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 11** — Frontend dashboard (basic sensor table: ID, temperature, humidity, battery, status, last seen)
 - [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
 - [x] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
-- [ ] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100) *(next)*
-- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability
+- [x] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
+- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(next)*
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -43,7 +43,17 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 13 complete.** 120 automated tests across six layers, one command (`pytest`, ~1 min). Guide: [docs/testing/automation.md](docs/testing/automation.md).
+**Phase 14 complete.** The simulator runs N sensors (`SENSOR_COUNT`, 1–1000), each with its own MQTT connection, start times spread across the interval, and varied starting conditions. The pipeline was verified at 5 → 10 → 50 → 100 sensors with the new `scripts/scale_check.py`. Full results: [docs/testing/scale-results.md](docs/testing/scale-results.md).
+- 100 sensors: 1189/1189 readings stored, 0 missing, 0 duplicates, ≤ 1 s latency. All four steps pass. The dashboard shows all 100 sensors.
+- Capacity: the receiver tops out at ~65–75 msg/s (3.3× the 100-sensor target). Above that nothing is lost, but latency grows. Batching is deferred to Phase 15 performance work.
+- Defect fixed: `GET /sensors` scanned the whole telemetry table (1.7 s at 1M rows). It now uses a latest-reading pointer on `sensors` maintained by the receiver (1.7 s → **2.5 ms** at 1M rows, independent of table size). The pointer only moves forward, so late messages don't replace newer readings. Existing DBs are upgraded by `python -m database.init_db` (new `database/migrations.py`).
+- Defect fixed: the simulator now stops gracefully on Ctrl+C / SIGTERM / Ctrl+Break, never between publishing and logging a reading (needed for `docker stop` in Phase 16 as well).
+- Defect fixed: `localhost` cost ~2 s per new connection on Windows (IPv6 first, API is IPv4-only). The scale script, e2e tests, and Vite proxy now use `127.0.0.1`.
+- Tests: 133 (13 new: 8 fleet unit tests, 4 concurrent multi-sensor and latest-pointer integration tests, 1 100-row dashboard test). All pass.
+
+Next: **Phase 15**: advanced features (alerts, commands, authentication, FOTA, failure injection, performance, security, reliability), including the limitations carried from Phase 12 (stale ONLINE status, no outage buffering, sensor metadata) and receiver throughput.
+
+**Phase 13 (previous).** 120 automated tests across six layers, one command (`pytest`, ~1 min). Guide: [docs/testing/automation.md](docs/testing/automation.md).
 - unit (60): parser, validator (every boundary ±0.01 from `tests/test-data/telemetry.json`), data generator, UTC handling.
 - api (29): every endpoint with positive, boundary, and negative cases, plus a 503 when the DB is down.
 - mqtt (5): round trip, wildcard, ordering.

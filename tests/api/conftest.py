@@ -24,9 +24,14 @@ def seeded_sensor(sensor_id):
         for i in range(3)
     ]
     with SessionLocal() as session, session.begin():
-        session.add(Sensor(sensor_id=sensor_id, status="ONLINE", battery=88.0, last_seen=base + timedelta(minutes=2)))
+        sensor = Sensor(sensor_id=sensor_id, status="ONLINE", battery=88.0, last_seen=base + timedelta(minutes=2))
+        session.add(sensor)
         session.flush()
-        session.add_all(Telemetry(sensor_id=sensor_id, **r) for r in readings)
+        rows = [Telemetry(sensor_id=sensor_id, **r) for r in readings]
+        session.add_all(rows)
+        session.flush()
+        # Same pointer the receiver maintains (see TelemetryRepository.save).
+        sensor.latest_telemetry_id, sensor.latest_reading_at = rows[-1].id, rows[-1].timestamp
 
     yield {"sensor_id": sensor_id, "readings": readings}
 

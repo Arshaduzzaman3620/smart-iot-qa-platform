@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.models import Sensor, Telemetry
@@ -19,18 +19,19 @@ def _get_sensor_or_404(db: Session, sensor_id: str) -> Sensor:
 
 @router.get("", response_model=list[SensorWithLatestOut])
 def list_sensors(db: Session = Depends(get_db)):
-    sensors = db.scalars(select(Sensor).order_by(Sensor.sensor_id)).all()
-
-    # Latest reading per sensor in one query (highest id = most recently stored), instead of
-    # one query per sensor -- the dashboard polls this endpoint for every sensor at once.
-    latest_ids = select(func.max(Telemetry.id)).group_by(Telemetry.sensor_id)
-    latest = {t.sensor_id: t for t in db.scalars(select(Telemetry).where(Telemetry.id.in_(latest_ids)))}
+    # Each sensor's latest reading via the pointer the receiver maintains: a primary-key join, so
+    # the cost depends on the number of sensors, not the size of the telemetry table.
+    rows = db.execute(
+        select(Sensor, Telemetry)
+        .outerjoin(Telemetry, Telemetry.id == Sensor.latest_telemetry_id)
+        .order_by(Sensor.sensor_id)
+    ).all()
 
     items = []
-    for sensor in sensors:
+    for sensor, latest in rows:
         item = SensorWithLatestOut.model_validate(sensor)
-        if sensor.sensor_id in latest:
-            item.latest_telemetry = TelemetryOut.model_validate(latest[sensor.sensor_id])
+        if latest is not None:
+            item.latest_telemetry = TelemetryOut.model_validate(latest)
         items.append(item)
     return items
 
