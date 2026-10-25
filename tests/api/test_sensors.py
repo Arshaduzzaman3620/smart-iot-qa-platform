@@ -17,7 +17,8 @@ def test_list_includes_seeded_sensor_with_latest_reading(client, seeded_sensor):
     sensors = {s["sensor_id"]: s for s in response.json()}
     sensor = sensors[seeded_sensor["sensor_id"]]
 
-    assert set(sensor) == SENSOR_FIELDS | {"latest_telemetry"}
+    assert set(sensor) == SENSOR_FIELDS | {"latest_telemetry", "active_alerts"}
+    assert sensor["active_alerts"] == 0
     assert sensor["status"] == "ONLINE"
     assert sensor["battery"] == 88.0
     latest = seeded_sensor["readings"][-1]

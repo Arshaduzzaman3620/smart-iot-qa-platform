@@ -1,32 +1,44 @@
 import { useEffect, useState } from "react";
 
-import { ApiError, fetchSensors } from "./api";
+import { ApiError, fetchActiveAlerts, fetchSensors } from "./api";
+import { AlertsPanel } from "./components/AlertsPanel";
 import { SensorTable } from "./components/SensorTable";
-import type { Sensor } from "./types";
+import type { Alert, Sensor } from "./types";
 
 // Matches the simulator's default SENSOR_INTERVAL, so each refresh usually shows a new reading.
 const REFRESH_MS = 5000;
 
 export default function App() {
   const [sensors, setSensors] = useState<Sensor[] | null>(null);
+  const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    let controller = new AbortController();
+    const controller = new AbortController();
+    let inFlight = false;
 
     async function load() {
-      controller.abort();
-      controller = new AbortController();
+      // Skip a tick while the previous load is still running. Cancelling it instead would mean an
+      // API slower than REFRESH_MS never shows anything at all (every response aborted by the next tick).
+      if (inFlight) return;
+      inFlight = true;
       try {
-        setSensors(await fetchSensors(controller.signal));
+        const [nextSensors, nextAlerts] = await Promise.all([
+          fetchSensors(controller.signal),
+          fetchActiveAlerts(controller.signal),
+        ]);
+        setSensors(nextSensors);
+        setAlerts(nextAlerts);
         setError(null);
         setUpdatedAt(Date.now());
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         // Keep showing the last good data; just flag that it may be stale.
         setError(err instanceof ApiError ? err.message : "Unexpected error");
+      } finally {
+        inFlight = false;
       }
     }
 
@@ -58,6 +70,8 @@ export default function App() {
           {error}. {sensors ? "Showing last known data." : "Retrying…"}
         </div>
       )}
+
+      {alerts && <AlertsPanel alerts={alerts} now={now} />}
 
       {sensors === null ? (
         !error && <p className="empty" data-testid="loading">Loading sensors…</p>

@@ -22,7 +22,7 @@ In development, Vite forwards `/api/*` to FastAPI at `http://localhost:8000` (ov
 
 ## What it shows
 
-One row per sensor, refreshed every 5 s (matching the simulator's default interval):
+An **alerts panel** lists every active alert, CRITICAL first and then newest first: severity badge (WARNING amber, CRITICAL red), sensor, message, and how long ago it was raised. With no active alerts it shows "No active alerts." Below it is one row per sensor. Both refresh every 5 s, matching the simulator's default interval, and come from `GET /sensors` and `GET /alerts?status=ACTIVE`, requested together:
 
 | Column | Source |
 |---|---|
@@ -36,12 +36,12 @@ One row per sensor, refreshed every 5 s (matching the simulator's default interv
 
 - **Loading**: first fetch in progress.
 - **Empty**: no sensors have reported yet.
-- **Error banner**: "Cannot reach the API" (FastAPI down) or "Database unavailable" (API returned 503). If data was already loaded, the table stays visible with "Showing last known data". Polling continues, and the banner clears automatically on recovery.
+- **Error banner** (either request failing): "Cannot reach the API" (FastAPI down) or "Database unavailable" (API returned 503). If data was already loaded, the table stays visible with "Showing last known data". Polling continues, and the banner clears automatically on recovery. A poll is skipped while the previous one is still running, so a slow API (> 5 s) still gets its response on screen instead of being cancelled by the next tick.
 
 ## Test hooks
 
-Stable `data-testid` attributes for Playwright (Phase 13): `sensor-table`, `sensor-row-{SENSOR_ID}`, and per cell `sensor-id`, `temperature`, `humidity`, `battery`, `status`, `last-seen`, plus `error-banner`, `sensors-empty`, `loading`, `last-updated`.
+Stable `data-testid` attributes for Playwright (Phase 13): `sensor-table`, `sensor-row-{SENSOR_ID}`, and per cell `sensor-id`, `temperature`, `humidity`, `battery`, `status`, `last-seen`, plus `error-banner`, `sensors-empty`, `loading`, `last-updated`. Alerts: `alerts-panel`, `alerts-none`, `alert-{id}`, and per alert `alert-severity`, `alert-sensor`, `alert-message`, `alert-since`.
 
-## Known limitation
+## Offline sensors
 
-`status` is whatever the receiver last wrote, and nothing marks a silent sensor `OFFLINE` yet. A sensor that stopped publishing keeps showing ONLINE, with a growing "last seen". Offline detection (heartbeat timeout) is part of Phase 15.
+Since Phase 15a, a sensor with no stored reading for 30 s (`OFFLINE_TIMEOUT`) is shown as OFFLINE and gets an OFFLINE alert. It turns ONLINE again with its next reading. See [alerts.md](../architecture/alerts.md).

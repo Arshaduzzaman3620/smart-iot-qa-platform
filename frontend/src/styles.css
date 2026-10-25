@@ -10,6 +10,8 @@
   --offline-bg: #eaeef2;
   --error: #b42318;
   --error-bg: #fde8e7;
+  --warning: #9a6700;
+  --warning-bg: #fff4d4;
   color-scheme: light dark;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -27,6 +29,8 @@
     --offline-bg: #262d35;
     --error: #ff8b80;
     --error-bg: #3d1714;
+    --warning: #e3b341;
+    --warning-bg: #3a2d0b;
   }
 }
 
@@ -73,7 +77,30 @@ tbody tr:last-child td { border-bottom: none; }
   color: var(--offline);
 }
 .badge-online { background: var(--online-bg); color: var(--online); }
-.badge-error { background: var(--error-bg); color: var(--error); }
+.badge-error, .badge-critical { background: var(--error-bg); color: var(--error); }
+.badge-warning { background: var(--warning-bg); color: var(--warning); }
+
+.alerts-none { margin-bottom: 16px; }
+.alerts {
+  margin-bottom: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.alerts h2 { margin: 0; padding: 10px 14px; font-size: 0.9375rem; border-bottom: 1px solid var(--border); }
+.alerts ul { margin: 0; padding: 0; list-style: none; max-height: 240px; overflow-y: auto; }
+.alerts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+}
+.alerts li:last-child { border-bottom: none; }
+.alerts .badge { min-width: 6.5em; text-align: center; }
+.alert-message { flex: 1; min-width: 12em; }
 
 .error {
   margin-bottom: 16px;
