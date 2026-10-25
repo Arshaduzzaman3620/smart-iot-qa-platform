@@ -11,7 +11,7 @@ from playwright.sync_api import expect
 from browser_servers import API_PORT, DASHBOARD_URL
 from helpers import valid_telemetry, wait_until
 
-API = f"http://localhost:{API_PORT}"
+API = f"http://127.0.0.1:{API_PORT}"  # not localhost: avoids a ~2 s IPv6 (::1) attempt on Windows
 
 
 def now_iso() -> str:

@@ -48,12 +48,19 @@ Implementation notes:
 - `status` defaults to `OFFLINE` (sensors) and `ACTIVE` (alerts), and `sensor_type` defaults to `ENVIRONMENT`. These are database-side defaults, so raw SQL inserts get them too.
 - Indexes: `telemetry (sensor_id, timestamp)` for history queries, `alerts (sensor_id, status)` for active-alert lookups.
 
+- `sensors.latest_telemetry_id` / `latest_reading_at` (Phase 14) point at each sensor's newest reading by sensor timestamp, so `GET /sensors` can join on the primary key instead of scanning telemetry. These columns have no FK constraint, because telemetry already references sensors and a constraint in both directions would conflict with the cascade.
+
+## Schema upgrades
+
+`python -m database.init_db` creates missing tables and then runs [database/migrations.py](../../database/migrations.py). Those are small, idempotent steps for columns added after a table was first created, because `create_all` never alters existing tables. Re-running is always safe.
+
 ## How the receiver writes
 
 For each accepted message, `receiver/storage/telemetry_repository.py` runs one transaction:
 
 1. Upsert `sensors` by `sensor_id`: insert if new (auto-registration), otherwise set `status=ONLINE`, `battery`, `last_seen` (receiver's UTC clock), and `updated_at`.
 2. Insert one `telemetry` row. `timestamp` is the sensor's ISO 8601 value converted to UTC. `received_at` is set by MySQL.
+3. Advance `sensors.latest_telemetry_id` / `latest_reading_at` to the new row, only if its timestamp is not older than the current latest. A delayed message stays in the history but never replaces a newer reading.
 
 All `DATETIME` columns hold UTC. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
 
