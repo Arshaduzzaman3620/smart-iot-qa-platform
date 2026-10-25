@@ -64,7 +64,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 12 — manual E2E verification** is complete: the full pipeline (sensor → MQTT → receiver → validate → MySQL → REST API → dashboard) is verified, with identical values at every hop. Next is Phase 13: test automation. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 13 — test automation** is complete: 120 automated tests (unit, API, MQTT, integration, Playwright UI and E2E) run with one `pytest` command. Next is Phase 14: scaling to 100 sensors. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
 
 ## Documentation
 
@@ -77,3 +77,4 @@ Currently: **Phase 12 — manual E2E verification** is complete: the full pipeli
 - [Web dashboard](docs/frontend/dashboard.md)
 - [Testing strategy](docs/testing/strategy.md)
 - [Manual E2E verification](docs/testing/e2e-manual-verification.md)
+- [Test automation](docs/testing/automation.md)
