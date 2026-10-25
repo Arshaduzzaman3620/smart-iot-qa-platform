@@ -9,7 +9,7 @@ tests/
   stack_fixtures.py    receiver_process (real receiver/main.py), mqtt_publisher
   browser_servers.py   api_server, dashboard_server (start or reuse FastAPI / Vite)
   test-data/telemetry.json   validator cases (valid / invalid with expected error)
-  unit/          parser, validator, data generator, UTC handling          no services
+  unit/          parser, validator, data generator, UTC handling, alerts  no services
   api/           FastAPI endpoints via TestClient                         MySQL
   mqtt/          broker publish/subscribe, wildcards, ordering            broker
   integration/   broker -> receiver process -> MySQL                      broker + MySQL
@@ -32,7 +32,7 @@ pytest -m "not e2e and not ui"
 
 - **Browser:** tests use the installed Google Chrome (`--browser-channel=chrome` in `pytest.ini`), so no Playwright browser download is needed. Add `--headed` to watch, or `--slowmo 500` to slow it down.
 - **Servers:** `api_server` and `dashboard_server` reuse a FastAPI or Vite server that is already running on 8000 / 5173, and otherwise start one for the session and stop it afterwards.
-- **Receiver:** integration and e2e tests start their own `receiver/main.py`. **Stop any receiver you started by hand first**, or every test message is stored twice and the exact-count assertions fail.
+- **Receiver:** integration and e2e tests start their own `receiver/main.py` (offline check every 1 s, no startup grace; it marks any genuinely silent dev sensor OFFLINE, which is correct behavior). **Stop any receiver you started by hand first**, or every test message is stored twice and the exact-count assertions fail.
 - **Missing services:** tests that need MySQL or the broker are skipped with a reason when those aren't running. Set `REQUIRE_SERVICES=1` (e.g. in CI) to make that a failure instead.
 
 ## Test data isolation
@@ -43,14 +43,14 @@ Tests never touch real sensors. Each test gets a unique `TEST-XXXXXXXX` sensor I
 
 | Layer | Tests | Highlights |
 |---|---|---|
-| unit | 68 | Parser rejects non-UTF-8, invalid JSON, and non-objects. Validator runs every boundary ±0.01, plus wrong types (incl. `bool`), missing/null fields, and bad timestamps, all from `test-data/telemetry.json`. Generator: drift ≤ max step, clamped to range, battery never increases, ranges identical to the validator's. Fleet: unique IDs, varied valid starting values, count limits, spread start offsets. Timestamps converted to naive UTC, and the API renders them with `Z`. |
-| api | 29 | Every endpoint: fields, sorting, exact values, newest-first, `limit` boundaries (1, 1000) and invalid values (0, 1001, -1, `abc`, `1.5`, empty) → 422. Unknown / injection-style IDs → 404. Write methods → 405. DB down → 503 with no details leaked. |
+| unit | 123 | Parser rejects non-UTF-8, invalid JSON, and non-objects. Validator runs every boundary ±0.01, plus wrong types (incl. `bool`), missing/null fields, and bad timestamps, all from `test-data/telemetry.json`. Generator: drift ≤ max step, clamped to range, battery never increases, ranges identical to the validator's. Fleet: unique IDs, varied valid starting values, count limits, spread start offsets. Timestamps converted to naive UTC with fractions truncated (never rounded up), and the API renders them with `Z`. Alert rules: every threshold ±0.01, escalation, hysteresis, thresholds reachable within validator ranges, readable offline durations. |
+| api | 47 | Every endpoint: fields, sorting, exact values, newest-first, `limit` boundaries (1, 1000) and invalid values (0, 1001, -1, `abc`, `1.5`, empty) → 422. Unknown / injection-style IDs → 404. Write methods → 405. DB down → 503 with no details leaked. `/alerts` filters, ordering, bad `status` / `limit` → 422, `active_alerts` counts only ACTIVE. |
 | mqtt | 5 | Round trip, `+` wildcard, non-matching topics, ordering at QoS 1, binary/empty payloads passed through unchanged. |
-| integration | 17 | Exact values stored, `+09:00` timestamp → UTC, auto-registration, upsert (one sensor row, N telemetry rows). Seven kinds of invalid message rejected with the right reason and nothing stored. Topic/`sensor_id` mismatch rejected. Receiver survives bad input. Boundary values stored exactly. Latest-reading pointer follows the newest timestamp and ignores late messages. 20 concurrent sensors × 5 readings stored exactly once. |
-| ui | 11 | Formatting (1 dp, units, relative time with a frozen clock), headers, low-battery threshold (19.99 red, 20.0 not), status badges, sensor with no readings, empty state, both error banners, keeps last data and recovers, renders 100 sensors, no horizontal scroll at 375 px. |
+| integration | 26 | Exact values stored, `+09:00` timestamp → UTC, auto-registration, upsert (one sensor row, N telemetry rows). Seven kinds of invalid message rejected with the right reason and nothing stored. Topic/`sensor_id` mismatch rejected. Receiver survives bad input. Boundary values stored exactly. Fractional seconds truncated, not rounded by MySQL. Latest-reading pointer follows the newest timestamp and ignores late messages. 20 concurrent sensors × 5 readings stored exactly once. Alerts: raise, no duplicates, escalate, resolve and re-raise, late reading ignored, silent sensor marked OFFLINE once, recovery back to ONLINE. |
+| ui | 17 | Formatting (1 dp, units, relative time with a frozen clock), headers, low-battery threshold (19.99 red, 20.0 not), status badges, sensor with no readings, empty state, both error banners, keeps last data and recovers, a response slower than the refresh interval still shows (fake clock), renders 100 sensors, no horizontal scroll at 375 px. Alerts panel: empty state, severity badges, appears and clears on refresh, CRITICAL listed first, API failure banner. |
 | e2e | 3 | Published reading appears on the dashboard with matching values. The dashboard updates without reload. A rejected reading never reaches the API or the dashboard. |
 
-**Total: 133 tests.** Verified that the suite catches regressions: widening the validator's temperature max from 85 to 86 failed 3 tests across 3 layers (unit, generator/validator consistency, integration).
+**Total: 221 tests.** Verified that the suite catches regressions: widening the validator's temperature max from 85 to 86 failed 3 tests across 3 layers (unit, generator/validator consistency, integration).
 
 ## Writing new tests
 

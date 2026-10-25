@@ -25,4 +25,18 @@ export interface Sensor {
   created_at: string;
   updated_at: string;
   latest_telemetry: Telemetry | null;
+  active_alerts: number;
+}
+
+export interface Alert {
+  id: number;
+  sensor_id: string;
+  // LOW_BATTERY / HIGH_TEMPERATURE / LOW_TEMPERATURE / HIGH_HUMIDITY / OFFLINE
+  alert_type: string;
+  severity: "WARNING" | "CRITICAL";
+  value: number | null;
+  message: string | null;
+  status: "ACTIVE" | "RESOLVED";
+  created_at: string;
+  resolved_at: string | null;
 }

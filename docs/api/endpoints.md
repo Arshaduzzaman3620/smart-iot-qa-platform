@@ -1,6 +1,6 @@
 # REST API
 
-FastAPI backend in [backend/](../../backend/). It is read-only at this stage. Authentication and write endpoints arrive in Phase 15.
+FastAPI backend in [backend/](../../backend/). It is read-only at this stage. Authentication and write endpoints arrive later in Phase 15.
 
 ## Running it
 
@@ -20,8 +20,10 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 | GET | `/sensors` | `200` list of sensors, sorted by `sensor_id`, each with `latest_telemetry` | `503` DB down |
 | GET | `/sensors/{sensor_id}` | `200` one sensor | `404 {"detail":"Sensor X not found"}`, `503` |
 | GET | `/sensors/{sensor_id}/telemetry?limit=N` | `200` readings, newest first | `404` unknown sensor, `422` limit outside 1–1000 or not an integer, `503` |
+| GET | `/sensors/{sensor_id}/alerts?status=&limit=N` | `200` the sensor's alerts, newest first | `404` unknown sensor, `422`, `503` |
+| GET | `/alerts?status=&sensor_id=&limit=N` | `200` alerts, newest first | `422` bad `status` or `limit`, `503` |
 
-`limit` defaults to 100. All datetimes are UTC ISO 8601 with a `Z` suffix, for example `2026-10-24T12:41:41Z`.
+`limit` defaults to 100. `status` is `ACTIVE` or `RESOLVED` (exact case), or omitted for both. An unknown `sensor_id` filter on `/alerts` returns `[]`. All datetimes are UTC ISO 8601 with a `Z` suffix, for example `2026-10-24T12:41:41Z`.
 
 ### Sensor
 
@@ -33,7 +35,7 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 }
 ```
 
-`GET /sensors` items also carry `latest_telemetry`: the sensor's most recently stored reading (Telemetry object below), or `null` if it has none. It is fetched for all sensors in one query, so the dashboard needs a single request per refresh.
+`GET /sensors` items also carry `latest_telemetry`: the sensor's most recently stored reading (Telemetry object below), or `null` if it has none. It is fetched for all sensors in one query, so the dashboard needs a single request per refresh. They also carry `active_alerts`: the number of the sensor's alerts with status `ACTIVE`.
 
 ### Telemetry
 
@@ -44,6 +46,18 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
   "received_at": "2026-10-24T12:41:41Z"
 }
 ```
+
+### Alert
+
+```json
+{
+  "id": 7, "sensor_id": "SENSOR-007", "alert_type": "LOW_BATTERY", "severity": "WARNING", "value": 19.5,
+  "message": "Battery low: 19.5 % (below 20 %)", "status": "ACTIVE",
+  "created_at": "2026-10-25T10:12:03Z", "resolved_at": null
+}
+```
+
+`alert_type` is one of `LOW_BATTERY`, `HIGH_TEMPERATURE`, `LOW_TEMPERATURE`, `HIGH_HUMIDITY`, or `OFFLINE`. `severity` is `WARNING` or `CRITICAL`. Rules and lifecycle: [alerts.md](../architecture/alerts.md).
 
 ## Error handling
 

@@ -37,6 +37,17 @@ The dashboard rendered all 100 sensors, each with distinct readings, refreshing 
 - Above the ceiling, **nothing is lost**: messages queue, and the receiver drains the backlog after the load stops (14 s here). The cost is latency, which grows for as long as the overload lasts.
 - Raising the ceiling (batched inserts, a writer thread) is performance work for Phase 15.
 
+## Re-measured in Phase 15a (2026-10-25)
+
+On the same machine one day later, `TelemetryRepository.save` took 18–39 ms at p50 (interleaved benchmarks, Phase 14 and 15a code in overlapping ranges), versus ~15 ms here. The 100-sensor run became unreliable:
+
+| Code | Runs passed | Typical failure | Missing |
+|---|---|---|---|
+| Phase 14 | 1 of 3 | max latency 25–26 s | 0 |
+| Phase 15a | 1 of 7 | max latency 24–39 s | 0 |
+
+No reading was ever lost; they only arrived late. With one commit (two disk flushes) per message, the receiver has too little headroom at 20 msg/s when flushes are slow. Batched writes are Phase 15b.
+
 ## Defects found and fixed while scaling
 
 1. **`GET /sensors` got slower with every reading stored.** The latest-reading-per-sensor query scanned the whole telemetry table. With 1M rows it took **~1,700 ms** (the table grows ~1.7M rows/day at 100 sensors). MySQL would not use a backward index scan in any per-sensor subquery form (correlated, `MAX()`, or `LATERAL`), as verified with `EXPLAIN ANALYZE`. **Fix:** the receiver keeps a pointer to each sensor's newest reading (`sensors.latest_telemetry_id` / `latest_reading_at`), updated in the same transaction, and the list endpoint joins on it by primary key: **2.5 ms at 1M rows**, independent of table size. The pointer only moves forward, so a delayed (out-of-order) message can't replace a newer reading. Existing databases are upgraded and backfilled by `python -m database.init_db` (see [database/migrations.py](../../database/migrations.py)).

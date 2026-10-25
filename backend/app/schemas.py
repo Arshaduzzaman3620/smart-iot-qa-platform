@@ -46,6 +46,20 @@ class SensorWithLatestOut(SensorOut):
     """List view for the dashboard: sensor state plus its most recent reading (None if it has none yet)."""
 
     latest_telemetry: TelemetryOut | None = None
+    active_alerts: int = 0
+
+
+class AlertOut(_UTCModel):
+    id: int
+    sensor_id: str
+    # LOW_BATTERY / HIGH_TEMPERATURE / LOW_TEMPERATURE / HIGH_HUMIDITY / OFFLINE
+    alert_type: str
+    severity: str  # WARNING / CRITICAL
+    value: float | None
+    message: str | None
+    status: str  # ACTIVE / RESOLVED
+    created_at: datetime
+    resolved_at: datetime | None
 
 
 class HealthOut(BaseModel):

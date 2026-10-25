@@ -11,11 +11,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from config import settings
 from mqtt.mqtt_client import MQTTSubscriber
 from parser.message_parser import MessageParser, ParseError
+from storage.offline_detector import OfflineDetector
 from storage.telemetry_repository import TelemetryRepository
 from validator.telemetry_validator import TelemetryValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("receiver")
+alert_logger = logging.getLogger("receiver.alerts")
 
 TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
 
@@ -44,13 +46,30 @@ def on_message(client, userdata, msg):
         return
 
     try:
-        telemetry_id = repository.save(data)
+        result = repository.save(data)
     except SQLAlchemyError as exc:
         # DB down or rejecting the write: drop this message but keep the receiver running.
         logger.error("Failed to store telemetry from %s: %s", data["sensor_id"], getattr(exc, "orig", exc))
         return
 
-    logger.info("Stored telemetry id=%s from %s: %s", telemetry_id, data["sensor_id"], data)
+    logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
+    for change in result.alert_changes:
+        if change.action == "RESOLVE":
+            alert_logger.info("Alert resolved for %s: %s", data["sensor_id"], change.alert_type)
+        else:
+            alert_logger.warning("Alert %s for %s: %s %s - %s",
+                                 "raised" if change.action == "RAISE" else "escalated", data["sensor_id"],
+                                 change.alert_type, change.severity, change.message)
+
+
+def check_offline(detector: OfflineDetector):
+    try:
+        offline = detector.sweep()
+    except SQLAlchemyError as exc:
+        logger.error("Offline check failed: %s", getattr(exc, "orig", exc))
+        return
+    for sensor in offline:
+        alert_logger.warning("Sensor %s marked OFFLINE: no telemetry for %.0f s", sensor.sensor_id, sensor.silent_seconds)
 
 
 def main():
@@ -59,9 +78,16 @@ def main():
     mqtt_client.connect([TELEMETRY_TOPIC])
     logger.info("Receiver starting, subscribing to %s", TELEMETRY_TOPIC)
 
+    detector = OfflineDetector(settings.OFFLINE_TIMEOUT)
+    next_check = time.monotonic() + settings.OFFLINE_STARTUP_GRACE
+    logger.info("Offline detection: timeout %gs, first check in %gs", settings.OFFLINE_TIMEOUT, settings.OFFLINE_STARTUP_GRACE)
+
     try:
         while True:
-            time.sleep(1)
+            if time.monotonic() >= next_check:
+                check_offline(detector)
+                next_check = time.monotonic() + settings.OFFLINE_CHECK_INTERVAL
+            time.sleep(min(1, settings.OFFLINE_CHECK_INTERVAL))
     except KeyboardInterrupt:
         logger.info("Stop requested (Ctrl+C)")
     finally:
