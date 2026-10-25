@@ -7,7 +7,8 @@
     {"name": "integers accepted", "patch": {"temperature": 20, "humidity": 50}},
     {"name": "timestamp with offset", "patch": {"timestamp": "2026-10-24T21:00:00+09:00"}},
     {"name": "timestamp without zone", "patch": {"timestamp": "2026-10-24T12:00:00"}},
-    {"name": "extra fields ignored", "patch": {"firmware": "1.0.0"}}
+    {"name": "extra fields ignored", "patch": {"firmware": "1.0.0"}},
+    {"name": "sensor_id at max length (50)", "patch": {"sensor_id": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"}}
   ],
   "invalid": [
     {"name": "temperature below min", "patch": {"temperature": -40.01}, "error": "temperature=-40.01 out of range"},
@@ -29,6 +30,7 @@
     {"name": "missing battery", "patch": {"battery": null}, "error": "missing required field: battery"},
     {"name": "empty sensor_id", "patch": {"sensor_id": ""}, "error": "sensor_id must be a non-empty string"},
     {"name": "numeric sensor_id", "patch": {"sensor_id": 1}, "error": "sensor_id must be a non-empty string"},
+    {"name": "sensor_id too long (51)", "patch": {"sensor_id": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"}, "error": "sensor_id longer than 50 characters"},
     {"name": "timestamp not ISO", "patch": {"timestamp": "yesterday"}, "error": "is not ISO 8601"},
     {"name": "timestamp as number", "patch": {"timestamp": 1729771200}, "error": "timestamp must be a non-empty string"}
   ]

@@ -39,8 +39,21 @@ class TelemetryRepository:
         self._session_factory = session_factory
 
     def save(self, data: dict) -> SaveResult:
+        return self.save_batch([data])[0]
+
+    def save_batch(self, batch: list[dict]) -> list[SaveResult]:
+        """Store several messages in one transaction: all or nothing, results in input order.
+
+        The commit (with its disk flushes) is most of the cost of a save, so sharing one commit
+        across a batch is what lets the receiver keep up under load. Messages are applied in order,
+        so a sensor's readings and alerts end up exactly as if they had been saved one by one.
+        """
+        with self._session_factory() as session, session.begin():
+            return [self._save_one(session, data) for data in batch]
+
+    def _save_one(self, session, data: dict) -> SaveResult:
         """Upsert the sensor's state, append one telemetry row, advance the sensor's latest-reading
-        pointer, and raise / escalate / resolve its alerts, atomically."""
+        pointer, and raise / escalate / resolve its alerts."""
         now = utc_now()
 
         # INSERT ... ON DUPLICATE KEY UPDATE: a first-seen sensor is registered automatically,
@@ -66,25 +79,25 @@ class TelemetryRepository:
             battery=data["battery"],
         )
 
-        with self._session_factory() as session, session.begin():
-            session.execute(upsert)
-            session.add(telemetry)
-            session.flush()
-            # Move the sensor's latest-reading pointer forward -- never back, so a delayed
-            # (out-of-order) message can't replace a newer reading on the dashboard.
-            advanced = session.execute(
-                update(Sensor)
-                .where(Sensor.sensor_id == data["sensor_id"])
-                .where(or_(Sensor.latest_reading_at.is_(None), Sensor.latest_reading_at <= telemetry.timestamp))
-                .values(latest_telemetry_id=telemetry.id, latest_reading_at=telemetry.timestamp)
-            ).rowcount == 1
-            changes = self._update_alerts(session, data, advanced, now)
-            return SaveResult(telemetry.id, changes)
+        session.execute(upsert)
+        session.add(telemetry)
+        session.flush()
+        # Move the sensor's latest-reading pointer forward -- never back, so a delayed
+        # (out-of-order) message can't replace a newer reading on the dashboard.
+        advanced = session.execute(
+            update(Sensor)
+            .where(Sensor.sensor_id == data["sensor_id"])
+            .where(or_(Sensor.latest_reading_at.is_(None), Sensor.latest_reading_at <= telemetry.timestamp))
+            .values(latest_telemetry_id=telemetry.id, latest_reading_at=telemetry.timestamp)
+        ).rowcount == 1
+        changes = self._update_alerts(session, data, advanced, now)
+        return SaveResult(telemetry.id, changes)
 
     @staticmethod
     def _update_alerts(session, data: dict, advanced: bool, now: datetime) -> list[AlertChange]:
         # The upsert above holds this sensor's row lock until commit, so concurrent saves for the
-        # same sensor are serialized here and can't both raise the same alert.
+        # same sensor are serialized here and can't both raise the same alert. Within a batch, this
+        # query autoflushes earlier messages' alert changes first, so it sees them too.
         active = {
             alert.alert_type: alert
             for alert in session.scalars(

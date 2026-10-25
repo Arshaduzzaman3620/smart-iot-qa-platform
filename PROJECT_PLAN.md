@@ -19,8 +19,9 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
   - [x] **15a** — Threshold alerts and offline detection
-  - [ ] **15b** — Receiver throughput: batched writes *(next; the 100-sensor margin is too thin, see below)*
-  - [ ] later parts — authentication, commands, FOTA, failure injection, security, reliability
+  - [x] **15b** — Receiver throughput: batched writes
+  - [ ] **15c** — Authentication and roles *(next)*
+  - [ ] later parts — commands, FOTA, failure injection, security, reliability
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -46,7 +47,15 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15a complete: alerts and offline detection.** Details: [docs/architecture/alerts.md](docs/architecture/alerts.md).
+**Phase 15b complete: batched writes.** Details: [docs/testing/scale-results.md](docs/testing/scale-results.md#phase-15b-batched-writes-2026-10-25).
+- The receiver validates on the MQTT thread and queues messages for one writer thread. That thread stores whatever is waiting (up to 200) in one transaction with one commit. There is no added latency at low load, and per-sensor order and alert behavior are unchanged.
+- Ceiling: 33 → ~95 msg/s (~4.5× the 100-sensor target). 100 sensors: 3 of 3 runs pass (max latency 1–2 s), where most runs had failed after 15a. Overload never loses data.
+- A failed batch is retried one by one, so a single bad message no longer costs the others.
+- Graceful stop on Ctrl+C / SIGTERM / Ctrl+Break: every accepted message is stored before exit (verified: stop after 300 of 2000 messages, all 2000 stored, exit code 0).
+- Defect fixed: a `sensor_id` over 50 characters passed validation but was rejected by MySQL (`VARCHAR(50)`). The validator now rejects it, and a test keeps the limit equal to the column size.
+- Tests: 241 (20 new). All pass.
+
+**Phase 15a (previous): alerts and offline detection.** Details: [docs/architecture/alerts.md](docs/architecture/alerts.md).
 - The receiver raises alerts while storing telemetry: `LOW_BATTERY`, `HIGH_TEMPERATURE`, `LOW_TEMPERATURE`, `HIGH_HUMIDITY`, each WARNING → CRITICAL. One active alert per (sensor, type), hysteresis on resolve, and only the newest reading is judged, so late messages are ignored.
 - Offline detection fixes the Phase 12 "stale ONLINE" limitation: a sensor with no reading for 30 s becomes OFFLINE with an `OFFLINE` alert, and it recovers automatically on its next reading. There is a startup grace period, so a receiver restart doesn't flag live sensors.
 - API: `GET /alerts`, `GET /sensors/{id}/alerts`, and `active_alerts` on `GET /sensors`. Dashboard: an active-alerts panel.

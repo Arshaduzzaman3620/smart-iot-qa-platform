@@ -45,3 +45,10 @@ def test_reports_every_missing_field():
 def test_reports_all_range_errors_at_once():
     errors = TelemetryValidator.validate(valid_telemetry(temperature=200, humidity=-5, battery=101))
     assert len(errors) == 3
+
+
+def test_sensor_id_limit_matches_database_column():
+    from database.models import Sensor
+    from validator.telemetry_validator import SENSOR_ID_MAX_LENGTH
+
+    assert SENSOR_ID_MAX_LENGTH == Sensor.__table__.c.sensor_id.type.length

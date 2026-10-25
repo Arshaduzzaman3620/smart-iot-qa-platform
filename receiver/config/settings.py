@@ -15,3 +15,6 @@ OFFLINE_CHECK_INTERVAL = float(os.getenv("OFFLINE_CHECK_INTERVAL", "5"))
 # Right after the receiver (re)starts, last_seen is stale for every sensor because nothing was
 # stored while it was down. Wait this long before the first check so live sensors can report in.
 OFFLINE_STARTUP_GRACE = float(os.getenv("OFFLINE_STARTUP_GRACE", str(OFFLINE_TIMEOUT)))
+
+# Most messages a single transaction stores when they queue up under load (one commit for all).
+RECEIVER_BATCH_MAX = int(os.getenv("RECEIVER_BATCH_MAX", "200"))
