@@ -64,7 +64,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 14 — multi-sensor scale** is complete: 100 simulated sensors flow through the pipeline with zero message loss, verified by `scripts/scale_check.py` and 133 automated tests. Next is Phase 15: advanced features. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 15a — alerts and offline detection** is complete: threshold alerts, automatic OFFLINE status for silent sensors, `/alerts` API, and an alerts panel on the dashboard, with 221 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, performance, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
 
 ## Documentation
 
@@ -79,3 +79,4 @@ Currently: **Phase 14 — multi-sensor scale** is complete: 100 simulated sensor
 - [Manual E2E verification](docs/testing/e2e-manual-verification.md)
 - [Test automation](docs/testing/automation.md)
 - [Multi-sensor scale results](docs/testing/scale-results.md)
+- [Alerts and offline detection](docs/architecture/alerts.md)

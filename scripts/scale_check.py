@@ -45,7 +45,7 @@ DROPPED_LINE = re.compile(r"Telemetry dropped")
 
 def start(command, cwd, log_path, extra_env=None):
     log = open(log_path, "w", encoding="utf-8")
-    env = {**os.environ, "PYTHONUNBUFFERED": "1", **(extra_env or {})}
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", **(extra_env or {})}
     # Own process group on Windows so it can receive Ctrl+Break (see graceful_stop).
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     return subprocess.Popen(command, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, env=env,

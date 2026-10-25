@@ -1,10 +1,11 @@
 """Dashboard behaviour with the API mocked, so every state is deterministic."""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from playwright.sync_api import expect
 
-from fake_api import sensor
+from fake_api import alert, sensor
 
 
 NOW = datetime(2026, 10, 24, 12, 0, 0, tzinfo=timezone.utc)
@@ -119,3 +120,78 @@ def test_no_horizontal_page_scroll_on_phone_width(open_dashboard, mock_sensors_a
     expect(page.get_by_test_id("sensor-table")).to_be_visible()
     overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 0
+
+
+def test_no_active_alerts_message(open_dashboard, mock_sensors_api):
+    mock_sensors_api([sensor()])
+    page = open_dashboard()
+    expect(page.get_by_test_id("alerts-none")).to_have_text("No active alerts.")
+    expect(page.get_by_test_id("alerts-panel")).to_have_count(0)
+
+
+def test_active_alerts_panel(open_dashboard, mock_sensors_api, mock_alerts_api, page):
+    page.clock.set_fixed_time(NOW)
+    mock_sensors_api([sensor("SENSOR-001"), sensor("SENSOR-002", status="OFFLINE")])
+    mock_alerts_api([
+        alert(2, "SENSOR-002", "OFFLINE", "WARNING", 45, "No telemetry for 45 s (timeout 30 s)", created_at=iso(90)),
+        alert(1, "SENSOR-001", "HIGH_TEMPERATURE", "CRITICAL", 72.5, "Temperature high: 72.5 °C (above 70 °C)",
+              created_at=iso(30)),
+    ])
+    page = open_dashboard()
+
+    panel = page.get_by_test_id("alerts-panel")
+    expect(panel.get_by_role("heading")).to_have_text("Active alerts (2)")
+    expect(panel.locator("li")).to_have_count(2)
+    critical = page.get_by_test_id("alert-1")
+    expect(critical.get_by_test_id("alert-severity")).to_have_text("CRITICAL")
+    expect(critical.get_by_test_id("alert-severity")).to_have_class("badge badge-critical")
+    expect(critical.get_by_test_id("alert-sensor")).to_have_text("SENSOR-001")
+    expect(critical.get_by_test_id("alert-message")).to_have_text("Temperature high: 72.5 °C (above 70 °C)")
+    expect(critical.get_by_test_id("alert-since")).to_have_text("30s ago")
+    expect(page.get_by_test_id("alert-2").get_by_test_id("alert-severity")).to_have_class("badge badge-warning")
+
+
+def test_alert_appears_and_clears_on_refresh(open_dashboard, mock_sensors_api, mock_alerts_api):
+    mock_sensors_api([sensor()])
+    page = open_dashboard()
+    expect(page.get_by_test_id("alerts-none")).to_be_visible()
+
+    mock_alerts_api([alert()])
+    expect(page.get_by_test_id("alert-1")).to_be_visible(timeout=8000)
+
+    mock_alerts_api([])
+    expect(page.get_by_test_id("alerts-none")).to_be_visible(timeout=8000)
+
+
+def test_alerts_api_failure_shows_error_banner(open_dashboard, mock_sensors_api, mock_alerts_api):
+    mock_sensors_api([sensor()])
+    mock_alerts_api({"detail": "Database unavailable"}, status=503)
+    page = open_dashboard()
+    expect(page.get_by_test_id("error-banner")).to_have_text("Database unavailable. Retrying…")
+
+
+def test_critical_alerts_are_listed_first(open_dashboard, mock_sensors_api, mock_alerts_api):
+    mock_sensors_api([sensor()])
+    # API order is newest first: two warnings, then an older critical alert.
+    mock_alerts_api([alert(3, severity="WARNING"), alert(2, severity="WARNING"), alert(1, severity="CRITICAL")])
+    page = open_dashboard()
+    expect(page.get_by_test_id("alerts-panel").get_by_test_id("alert-severity")).to_have_text(
+        ["CRITICAL", "WARNING", "WARNING"])
+    expect(page.get_by_test_id("alerts-panel").locator("li").first).to_have_attribute("data-testid", "alert-1")
+
+
+def test_slow_response_is_not_cancelled_by_the_next_poll(open_dashboard, mock_alerts_api, page):
+    # An API slower than the 5 s refresh must still get its data on screen.
+    page.clock.install()
+    held = []
+    page.route("**/api/sensors", lambda route: held.append(route))  # hold requests open, unanswered
+    open_dashboard()
+    while not held:
+        page.wait_for_timeout(50)
+    page.wait_for_timeout(300)  # dev StrictMode mounts twice; the first request is aborted on cleanup
+    pending = held[-1]
+
+    page.clock.run_for(6000)  # the next poll comes due while that request is still pending
+    pending.fulfill(status=200, content_type="application/json", body=json.dumps([sensor("SLOW-1")]))
+
+    expect(row(page, "SLOW-1")).to_be_visible()

@@ -17,7 +17,10 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
 - [x] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
 - [x] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
-- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(next)*
+- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
+  - [x] **15a** — Threshold alerts and offline detection
+  - [ ] **15b** — Receiver throughput: batched writes *(next; the 100-sensor margin is too thin, see below)*
+  - [ ] later parts — authentication, commands, FOTA, failure injection, security, reliability
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -43,7 +46,18 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 14 complete.** The simulator runs N sensors (`SENSOR_COUNT`, 1–1000), each with its own MQTT connection, start times spread across the interval, and varied starting conditions. The pipeline was verified at 5 → 10 → 50 → 100 sensors with the new `scripts/scale_check.py`. Full results: [docs/testing/scale-results.md](docs/testing/scale-results.md).
+**Phase 15a complete: alerts and offline detection.** Details: [docs/architecture/alerts.md](docs/architecture/alerts.md).
+- The receiver raises alerts while storing telemetry: `LOW_BATTERY`, `HIGH_TEMPERATURE`, `LOW_TEMPERATURE`, `HIGH_HUMIDITY`, each WARNING → CRITICAL. One active alert per (sensor, type), hysteresis on resolve, and only the newest reading is judged, so late messages are ignored.
+- Offline detection fixes the Phase 12 "stale ONLINE" limitation: a sensor with no reading for 30 s becomes OFFLINE with an `OFFLINE` alert, and it recovers automatically on its next reading. There is a startup grace period, so a receiver restart doesn't flag live sensors.
+- API: `GET /alerts`, `GET /sensors/{id}/alerts`, and `active_alerts` on `GET /sensors`. Dashboard: an active-alerts panel.
+- Defect fixed: the receiver's log was written in the Windows code page (cp932) when redirected, so a "°C" in an alert message broke every test reading the log. Child processes started by tests and `scale_check.py` now use UTF-8.
+- Defect fixed: the first offline check used a locking read over the whole `sensors` table. Under REPEATABLE READ that locked every row and gap every 5 s and stalled the receiver (100 sensors: max latency 39 s). It now reads without locks and locks only the stale candidates.
+- Finding (not caused by 15a): a receiver commit costs 18–39 ms on this machine today, against ~15 ms during Phase 14. The 100-sensor scale check now usually fails on latency, with Phase 14 code as well (1 of 3 runs passed). Nothing is lost. Batched writes are the next part (15b). See [scale-results.md](docs/testing/scale-results.md).
+- Defect fixed: MySQL `DATETIME` *rounds* fractional seconds (`12:00:00.6` → `12:00:01`), so sensor timestamps and `last_seen` could be stored up to 0.5 s in the future. This showed up as an intermittently failing offline test ("4 min" instead of "5 min"). The receiver now truncates to whole seconds before writing.
+- Defect fixed: each dashboard poll aborted the previous one if it was still running, so an API slower than 5 s would never show data, and no error either. The dashboard now skips a tick while a load is in flight. A UI test reproduces this with a fake clock: it fails on the old code and passes on the new.
+- Tests: 221 (88 new). All pass.
+
+**Phase 14 (previous). The simulator runs N sensors (`SENSOR_COUNT`, 1–1000), each with its own MQTT connection, start times spread across the interval, and varied starting conditions. The pipeline was verified at 5 → 10 → 50 → 100 sensors with the new `scripts/scale_check.py`. Full results: [docs/testing/scale-results.md](docs/testing/scale-results.md).
 - 100 sensors: 1189/1189 readings stored, 0 missing, 0 duplicates, ≤ 1 s latency. All four steps pass. The dashboard shows all 100 sensors.
 - Capacity: the receiver tops out at ~65–75 msg/s (3.3× the 100-sensor target). Above that nothing is lost, but latency grows. Batching is deferred to Phase 15 performance work.
 - Defect fixed: `GET /sensors` scanned the whole telemetry table (1.7 s at 1M rows). It now uses a latest-reading pointer on `sensors` maintained by the receiver (1.7 s → **2.5 ms** at 1M rows, independent of table size). The pointer only moves forward, so late messages don't replace newer readings. Existing DBs are upgraded by `python -m database.init_db` (new `database/migrations.py`).

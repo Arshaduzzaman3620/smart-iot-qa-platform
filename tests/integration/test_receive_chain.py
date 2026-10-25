@@ -42,6 +42,12 @@ def test_valid_message_is_stored_with_exact_values(mqtt_publisher, sensor_id):
     assert row.received_at is not None
 
 
+def test_fractional_seconds_are_truncated_not_rounded(mqtt_publisher, sensor_id):
+    mqtt_publisher(sensor_id, valid_telemetry(sensor_id, timestamp="2026-10-24T12:00:00.6Z"))
+    [row] = wait_until(lambda: telemetry_rows(sensor_id))
+    assert row.timestamp == datetime(2026, 10, 24, 12, 0, 0)  # MySQL alone would store 12:00:01
+
+
 def test_first_message_auto_registers_sensor_online(mqtt_publisher, sensor_id):
     assert get_sensor(sensor_id) is None
     mqtt_publisher(sensor_id, valid_telemetry(sensor_id, battery=42.5))

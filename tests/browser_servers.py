@@ -32,7 +32,7 @@ def _serve(name: str, host: str, port: int, command: list[str], cwd, log_dir):
     log_path = log_dir / f"{name}.log"
     with open(log_path, "w", encoding="utf-8") as log:
         process = subprocess.Popen(command, cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
-                                   env={**os.environ, "PYTHONUNBUFFERED": "1"})
+                                   env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
         try:
             wait_until(lambda: port_open(host, port) or process.poll() is not None, timeout=60)
             if process.poll() is not None:
