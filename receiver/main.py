@@ -1,5 +1,7 @@
 import logging
+import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from config import settings
 from mqtt.mqtt_client import MQTTSubscriber
 from parser.message_parser import MessageParser, ParseError
+from storage.batch_writer import BatchWriter
 from storage.offline_detector import OfflineDetector
 from storage.telemetry_repository import TelemetryRepository
 from validator.telemetry_validator import TelemetryValidator
@@ -21,7 +24,39 @@ alert_logger = logging.getLogger("receiver.alerts")
 
 TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
 
-repository = TelemetryRepository()
+# Set by Ctrl+C / SIGTERM (e.g. `docker stop`) / Ctrl+Break on Windows. Stopping disconnects from
+# the broker first, then lets the writer store every message it already accepted.
+stop_requested = threading.Event()
+
+
+def request_stop(signum, frame):
+    logger.info("Stop requested (%s)", signal.Signals(signum).name)
+    stop_requested.set()
+
+
+def install_stop_handlers():
+    for name in ("SIGINT", "SIGTERM", "SIGBREAK"):  # SIGBREAK exists only on Windows
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), request_stop)
+
+
+def log_saved(data: dict, result):
+    logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
+    for change in result.alert_changes:
+        if change.action == "RESOLVE":
+            alert_logger.info("Alert resolved for %s: %s", data["sensor_id"], change.alert_type)
+        else:
+            alert_logger.warning("Alert %s for %s: %s %s - %s",
+                                 "raised" if change.action == "RAISE" else "escalated", data["sensor_id"],
+                                 change.alert_type, change.severity, change.message)
+
+
+def log_failed(data: dict, exc: Exception):
+    # DB down or rejecting the write: drop this message but keep the receiver running.
+    logger.error("Failed to store telemetry from %s: %s", data["sensor_id"], getattr(exc, "orig", exc))
+
+
+writer = BatchWriter(TelemetryRepository(), log_saved, log_failed, max_batch=settings.RECEIVER_BATCH_MAX)
 
 
 def topic_sensor_id(topic: str) -> str:
@@ -45,21 +80,8 @@ def on_message(client, userdata, msg):
         logger.warning("Rejected message on %s: %s", msg.topic, "; ".join(errors))
         return
 
-    try:
-        result = repository.save(data)
-    except SQLAlchemyError as exc:
-        # DB down or rejecting the write: drop this message but keep the receiver running.
-        logger.error("Failed to store telemetry from %s: %s", data["sensor_id"], getattr(exc, "orig", exc))
-        return
-
-    logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
-    for change in result.alert_changes:
-        if change.action == "RESOLVE":
-            alert_logger.info("Alert resolved for %s: %s", data["sensor_id"], change.alert_type)
-        else:
-            alert_logger.warning("Alert %s for %s: %s %s - %s",
-                                 "raised" if change.action == "RAISE" else "escalated", data["sensor_id"],
-                                 change.alert_type, change.severity, change.message)
+    # Stored (and logged) by the writer thread, batched with whatever else is waiting.
+    writer.submit(data)
 
 
 def check_offline(detector: OfflineDetector):
@@ -73,6 +95,8 @@ def check_offline(detector: OfflineDetector):
 
 
 def main():
+    install_stop_handlers()
+    writer.start()
     mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id="receiver")
     mqtt_client.set_message_handler(on_message)
     mqtt_client.connect([TELEMETRY_TOPIC])
@@ -83,15 +107,18 @@ def main():
     logger.info("Offline detection: timeout %gs, first check in %gs", settings.OFFLINE_TIMEOUT, settings.OFFLINE_STARTUP_GRACE)
 
     try:
-        while True:
+        while not stop_requested.is_set():
             if time.monotonic() >= next_check:
                 check_offline(detector)
                 next_check = time.monotonic() + settings.OFFLINE_CHECK_INTERVAL
-            time.sleep(min(1, settings.OFFLINE_CHECK_INTERVAL))
-    except KeyboardInterrupt:
-        logger.info("Stop requested (Ctrl+C)")
+            stop_requested.wait(min(1, settings.OFFLINE_CHECK_INTERVAL))
     finally:
         mqtt_client.disconnect()
+        # Store what was already accepted before exiting.
+        if writer.stop():
+            logger.info("Receiver stopped")
+        else:
+            logger.error("Receiver stopped before storing every queued message")
 
 
 if __name__ == "__main__":

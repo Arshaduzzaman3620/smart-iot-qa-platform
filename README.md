@@ -64,7 +64,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 15a — alerts and offline detection** is complete: threshold alerts, automatic OFFLINE status for silent sensors, `/alerts` API, and an alerts panel on the dashboard, with 221 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, performance, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 15b — batched writes** is complete: the receiver stores messages in batches, raising its ceiling from ~33 to ~95 msg/s, with graceful shutdown. Before it, 15a added alerts and offline detection. 241 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
 
 ## Documentation
 

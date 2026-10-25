@@ -1,5 +1,8 @@
 from datetime import datetime
 
+# sensors.sensor_id is VARCHAR(50): a longer ID would pass here but be rejected by MySQL.
+SENSOR_ID_MAX_LENGTH = 50
+
 REQUIRED_FIELDS = ("sensor_id", "timestamp", "temperature", "humidity", "pressure", "light", "battery")
 
 # (min, max) per docs/architecture/sensor-behavior.md "Data ranges" table.
@@ -30,6 +33,8 @@ class TelemetryValidator:
 
         if not isinstance(data["sensor_id"], str) or not data["sensor_id"]:
             errors.append("sensor_id must be a non-empty string")
+        elif len(data["sensor_id"]) > SENSOR_ID_MAX_LENGTH:
+            errors.append(f"sensor_id longer than {SENSOR_ID_MAX_LENGTH} characters")
 
         if not isinstance(data["timestamp"], str) or not data["timestamp"]:
             errors.append("timestamp must be a non-empty string")

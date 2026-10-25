@@ -56,7 +56,7 @@ Implementation notes:
 
 ## How the receiver writes
 
-For each accepted message, `receiver/storage/telemetry_repository.py` runs one transaction:
+Accepted messages are queued for a single writer thread ([receiver/storage/batch_writer.py](../../receiver/storage/batch_writer.py)). It stores whatever is waiting, up to `RECEIVER_BATCH_MAX` (default 200), in **one transaction** via `TelemetryRepository.save_batch`, applying these steps to each message in arrival order:
 
 1. Upsert `sensors` by `sensor_id`: insert if new (auto-registration), otherwise set `status=ONLINE`, `battery`, `last_seen` (receiver's UTC clock), and `updated_at`.
 2. Insert one `telemetry` row. `timestamp` is the sensor's ISO 8601 value converted to UTC. `received_at` is set by MySQL.
@@ -64,6 +64,8 @@ For each accepted message, `receiver/storage/telemetry_repository.py` runs one t
 4. Update `alerts` (Phase 15a): resolve the sensor's active `OFFLINE` alert, and, only if step 3 advanced the pointer, raise / escalate / resolve threshold alerts. See [alerts.md](alerts.md).
 
 Separately, the receiver's offline check sets silent `ONLINE` sensors to `OFFLINE` and inserts their `OFFLINE` alerts.
+
+One commit per batch instead of per message is what lifted the receiver's ceiling from ~33 to ~95 msg/s (Phase 15b). The result is identical to saving the messages one by one, alerts included. If a batch fails, the writer retries its messages individually, so only a message MySQL rejects is lost.
 
 All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fractions itself, because MySQL would round them, which can put a time up to 0.5 s in the future. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
 
