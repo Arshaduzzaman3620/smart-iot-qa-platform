@@ -2,7 +2,7 @@
 
 A fully simulated, fictional IoT sensor platform built to learn and demonstrate Software Quality Assurance and test automation end-to-end: Python, TypeScript, MQTT, FastAPI, MySQL, Playwright, pytest, Docker, CI/CD, and AI-assisted QA.
 
-**This project uses no real hardware, company code, company data, or company credentials.** Every sensor, message, and dataset is fictional, generated entirely from scratch for learning purposes.
+
 
 ## What this is
 
