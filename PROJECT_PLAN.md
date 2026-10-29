@@ -20,6 +20,7 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
   - [x] **15a** — Threshold alerts and offline detection
   - [x] **15b** — Receiver throughput: batched writes
+  - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
   - [ ] **15c** — Authentication and roles *(next)*
   - [ ] later parts — commands, FOTA, failure injection, security, reliability
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
@@ -47,7 +48,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15b complete: batched writes.** Details: [docs/testing/scale-results.md](docs/testing/scale-results.md#phase-15b-batched-writes-2026-10-25).
+**Portable environment complete (2026-10-29).** The project moved from a Windows laptop to a Mac (Apple Silicon), which had Python 3.9 and no Node. Instead of fixing one machine, Docker is now the only requirement. Details: [docs/development/setup.md](docs/development/setup.md).
+- `docker compose up -d --build` runs everything: broker, MySQL, a one-shot `init-db`, receiver, API, simulator (5 sensors) and the dashboard (production build behind nginx, which proxies `/api`). Verified on macOS arm64: all services healthy, 5 sensors reporting through the API and through the dashboard proxy.
+- `docker compose -f compose.test.yaml run --rm --build tests` runs all 241 tests in a container (Python 3.12, Node 22, Playwright Chromium) against its own broker and an in-memory MySQL. **241 passed in 50 s with no skips**, while the dev stack was running.
+- GitHub Actions ([ci.yml](.github/workflows/ci.yml)) runs the suite and a full `docker compose up` smoke test on every push.
+- Graceful stop verified in Docker: `docker compose stop` stops the simulator first, then the receiver drains its queue, and both exit with code 0. `stop_grace_period: 60s` allows for a long drain.
+- Host-run fixes: defaults now match the published ports (`127.0.0.1:3307`, `127.0.0.1:1883`), so `.env` is optional. `API_HOST` is configurable. Python below 3.10 stops with a clear message instead of a TypeError inside SQLAlchemy. Versions pinned in `.python-version`, `frontend/.nvmrc` and `engines`.
+- Portability fixes: `.gitattributes` forces LF (a CRLF checkout would break files in Linux containers). Browser tests use Playwright's Chromium instead of an installed Google Chrome, which doesn't exist for Linux arm64. `node_modules` is never copied from the host, because esbuild ships per-OS binaries.
+- `docker/docker-compose.yml` was replaced by `compose.yaml` at the repo root. The project name and volume are unchanged, so existing data is kept.
+
+**Phase 15b (previous): batched writes.** Details: [docs/testing/scale-results.md](docs/testing/scale-results.md#phase-15b-batched-writes-2026-10-25).
 - The receiver validates on the MQTT thread and queues messages for one writer thread. That thread stores whatever is waiting (up to 200) in one transaction with one commit. There is no added latency at low load, and per-sensor order and alert behavior are unchanged.
 - Ceiling: 33 → ~95 msg/s (~4.5× the 100-sensor target). 100 sensors: 3 of 3 runs pass (max latency 1–2 s), where most runs had failed after 15a. Overload never loses data.
 - A failed batch is retried one by one, so a single bad message no longer costs the others.

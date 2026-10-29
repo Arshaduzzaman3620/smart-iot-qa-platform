@@ -6,6 +6,10 @@ import threading
 import time
 from datetime import datetime, timezone
 
+if sys.version_info < (3, 10):  # `X | None` annotations below fail on import otherwise
+    raise SystemExit(f"Python 3.10+ is required (3.12 recommended), this is {sys.version.split()[0]}. "
+                     "See docs/development/setup.md, or run everything in Docker: docker compose up -d --build")
+
 from config import settings
 from generator.data_generator import DataGenerator
 from mqtt.mqtt_client import MQTTClient

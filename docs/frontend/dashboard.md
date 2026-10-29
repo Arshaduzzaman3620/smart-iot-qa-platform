@@ -6,7 +6,7 @@ React 18 + TypeScript app built with Vite, in [frontend/](../../frontend/).
 
 ```bash
 # 1. infrastructure + data flow (see docs/architecture/database.md)
-docker compose -f docker/docker-compose.yml up -d --wait
+docker compose up -d --wait mqtt mysql    # infrastructure only
 python -m database.init_db
 cd receiver && python main.py               # terminal 1
 cd sensor-simulator && python main.py       # terminal 2

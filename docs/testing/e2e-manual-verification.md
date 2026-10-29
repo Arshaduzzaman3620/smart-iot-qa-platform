@@ -7,7 +7,7 @@ Run date: 2026-10-24. Stack: Mosquitto 2 + MySQL 8.4 (Docker Compose), receiver,
 ## How to reproduce
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --wait
+docker compose up -d --wait mqtt mysql    # infrastructure only
 python -m database.init_db
 cd receiver && python main.py                 # terminal 1
 python -m backend.app.main                    # terminal 2 (repo root)

@@ -42,7 +42,7 @@ def pytest_collection_modifyitems(config, items):
 def _require(name: str, host: str, port: int):
     if port_open(host, port):
         return
-    message = f"{name} not reachable at {host}:{port} (start it with docker compose -f docker/docker-compose.yml up -d)"
+    message = f"{name} not reachable at {host}:{port} (start it with: docker compose up -d mqtt mysql)"
     if os.getenv("REQUIRE_SERVICES") == "1":
         pytest.fail(message)
     pytest.skip(message)
