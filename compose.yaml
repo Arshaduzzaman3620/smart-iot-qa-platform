@@ -51,7 +51,10 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      # Over TCP (127.0.0.1), as the app user, against the app database. During first-start setup
+      # the image runs a temporary server reachable only through the local socket, so a socket
+      # ping (-h localhost) reported healthy too early and init-db was refused (CI, 2026-10-29).
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\" > /dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -61,7 +64,10 @@ services:
   init-db:
     <<: *python
     command: ["python", "-m", "database.init_db"]
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Second safety net behind the healthcheck: keep retrying while MySQL still refuses connections.
+      INIT_DB_WAIT: "60"
     depends_on:
       mysql:
         condition: service_healthy
