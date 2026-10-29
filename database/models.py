@@ -3,8 +3,8 @@ from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, Double, ForeignKey, Index, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-# Schema per docs/architecture/database.md. Phase 8 covers sensors, telemetry, alerts only;
-# users / firmware / firmware_updates arrive with their features in Phase 15.
+# Schema per docs/architecture/database.md. Tables arrive with their features: sensors, telemetry,
+# alerts (Phase 8), users (15c).
 
 
 class Base(DeclarativeBase):
@@ -83,3 +83,16 @@ class Alert(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ACTIVE")
 
     sensor: Mapped[Sensor] = relationship(back_populates="alerts")
+
+
+class User(Base):
+    """A dashboard / API user. Passwords are stored only as a salted scrypt hash (backend/app/security.py)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # VIEWER < OPERATOR < ADMIN, see docs/api/auth.md.
+    role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="VIEWER")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())

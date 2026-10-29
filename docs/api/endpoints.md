@@ -1,13 +1,13 @@
 # REST API
 
-FastAPI backend in [backend/](../../backend/). It is read-only at this stage. Authentication and write endpoints arrive later in Phase 15.
+FastAPI backend in [backend/](../../backend/). Every endpoint except `/health` needs a bearer token: see [auth.md](auth.md) for signing in, roles, user management and `PATCH /sensors/{id}`.
 
 ## Running it
 
 ```bash
 # from the repo root, with MySQL up (see docs/architecture/database.md)
 pip install -r backend/requirements.txt
-python -m backend.app.main          # serves on 127.0.0.1:$API_PORT (default 8000)
+ADMIN_PASSWORD=choose-one python -m backend.app.main   # 127.0.0.1:$API_PORT (default 8000); creates the first admin
 ```
 
 Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8000/redoc`.
@@ -16,6 +16,7 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
+| POST | `/auth/login` | `200` token, see [auth.md](auth.md) | `401`, `422` |
 | GET | `/health` | `200 {"status":"ok","database":"ok"}` | `503 {"status":"degraded","database":"unavailable"}` |
 | GET | `/sensors` | `200` list of sensors, sorted by `sensor_id`, each with `latest_telemetry` | `503` DB down |
 | GET | `/sensors/{sensor_id}` | `200` one sensor | `404 {"detail":"Sensor X not found"}`, `503` |
@@ -60,6 +61,8 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 `alert_type` is one of `LOW_BATTERY`, `HIGH_TEMPERATURE`, `LOW_TEMPERATURE`, `HIGH_HUMIDITY`, or `OFFLINE`. `severity` is `WARNING` or `CRITICAL`. Rules and lifecycle: [alerts.md](../architecture/alerts.md).
 
 ## Error handling
+
+- No or bad token → `401`, role too low → `403` (see [auth.md](auth.md)). The table above lists the other errors.
 
 - Any database connection failure returns `503 {"detail":"Database unavailable"}`. The client never sees a stack trace or connection details. The full error is logged server-side, without credentials.
 - The API recovers automatically once MySQL is back (`pool_pre_ping`), with no restart needed.

@@ -12,7 +12,7 @@ docker compose up -d --build        # broker, MySQL, schema, receiver, API, simu
 
 | What | Where |
 |---|---|
-| Dashboard | http://localhost:8080 |
+| Dashboard | http://localhost:8080 (sign in as `admin` / `admin-dev-password`) |
 | API + Swagger UI | http://localhost:8000/docs |
 | MQTT broker | `127.0.0.1:1883` |
 | MySQL | `127.0.0.1:3307` (user `smart_iot_user`, password `changeme`) |
@@ -52,7 +52,7 @@ docker compose up -d --wait mqtt mysql         # infrastructure only
 python -m database.init_db
 cd receiver && python main.py                  # terminal 1
 cd sensor-simulator && python main.py          # terminal 2
-python -m backend.app.main                     # terminal 3, repo root
+ADMIN_PASSWORD=admin-dev-password python -m backend.app.main   # terminal 3, repo root
 cd frontend && npm run dev                     # terminal 4: http://localhost:5173
 ```
 

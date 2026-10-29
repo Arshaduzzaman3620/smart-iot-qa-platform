@@ -24,7 +24,7 @@ for path in (ROOT, ROOT / "receiver", ROOT / "sensor-simulator"):
         sys.path.insert(0, str(path))
 
 from database import config as db_config  # noqa: E402  (also loads the repo-root .env)
-from helpers import MQTT_HOST, MQTT_PORT, TEST_PREFIX, port_open  # noqa: E402
+from helpers import MQTT_HOST, MQTT_PORT, TEST_PASSWORD, TEST_PREFIX, TEST_USER_PREFIX, port_open  # noqa: E402
 
 # Shared fixtures, registered once so session fixtures (e.g. the receiver process) are never duplicated.
 pytest_plugins = ["stack_fixtures", "browser_servers"]
@@ -66,17 +66,33 @@ def sensor_id() -> str:
 
 @pytest.fixture(scope="session")
 def clean_test_rows(mysql_available):
-    """Delete every TEST-* sensor (telemetry/alerts cascade) before and after the session."""
+    """Delete every TEST-* sensor (telemetry/alerts cascade) and test-* user before and after the session."""
     from sqlalchemy import delete
 
-    from database.models import Sensor
+    from database.models import Sensor, User
     from database.session import SessionLocal
 
     def purge():
         with SessionLocal() as session, session.begin():
             session.execute(delete(Sensor).where(Sensor.sensor_id.like(f"{TEST_PREFIX}%")))
+            session.execute(delete(User).where(User.username.like(f"{TEST_USER_PREFIX}%")))
 
     purge()
     yield
     purge()
+
+
+@pytest.fixture(scope="session")
+def test_users(clean_test_rows):
+    """One user per role: {"VIEWER": ("test-viewer", password), ...}. Removed with the other test rows."""
+    from backend.app.security import hash_password
+    from database.models import User
+    from database.session import SessionLocal
+
+    users = {role: (f"{TEST_USER_PREFIX}{role.lower()}", TEST_PASSWORD) for role in ("VIEWER", "OPERATOR", "ADMIN")}
+    password_hash = hash_password(TEST_PASSWORD)
+    with SessionLocal() as session, session.begin():
+        for role, (username, _) in users.items():
+            session.add(User(username=username, password_hash=password_hash, role=role))
+    return users
 

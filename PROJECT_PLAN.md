@@ -21,8 +21,9 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15a** — Threshold alerts and offline detection
   - [x] **15b** — Receiver throughput: batched writes
   - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
-  - [ ] **15c** — Authentication and roles *(next)*
-  - [ ] later parts — commands, FOTA, failure injection, security, reliability
+  - [x] **15c** — Authentication and roles
+  - [ ] **15d** — Sensor commands *(next)*
+  - [ ] later parts — FOTA, failure injection and reliability, security and performance
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -48,7 +49,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Portable environment complete (2026-10-29).** The project moved from a Windows laptop to a Mac (Apple Silicon), which had Python 3.9 and no Node. Instead of fixing one machine, Docker is now the only requirement. Details: [docs/development/setup.md](docs/development/setup.md).
+**Phase 15c complete: authentication and roles.** Details: [docs/api/auth.md](docs/api/auth.md).
+- `POST /auth/login` issues a JWT (HS256, 60 min). Every endpoint except `/health` needs one. Roles are VIEWER (read) < OPERATOR (also `PATCH /sensors/{id}` name/location) < ADMIN (also `/users`: list, create, delete). The role is read from the database on every request, so deleting a user or demoting them takes effect at once, and a token's own role claim is never trusted.
+- Passwords are salted scrypt from the standard library and are never stored, logged or echoed in a 422. An unknown username takes as long to reject as a wrong password, with the same message, so usernames can't be enumerated. Tokens with `alg: none`, a wrong signature, or no expiry are rejected.
+- The first admin is created on API startup when the users table is empty (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, Compose dev default `admin` / `admin-dev-password`).
+- Dashboard: sign-in form, user and role in the header, sign out, and automatic sign-out with the reason on any 401. New sensor details panel: metadata, the 20 newest readings, alert history, and an edit form for OPERATOR+.
+- Verified by hand with curl (21 positive and negative checks) and in a real browser (login, wrong password, details, edit, reload, sign out, 375 px width). A name containing `<img onerror>` is shown as text.
+- Hardening found while testing: FastAPI's default 422 echoed the rejected password back in `input`. It is now stripped for password fields. A `JWT_SECRET` under 32 bytes triggers a warning.
+- Tests: 378 (131 new: token, hash and role unit tests; login, token, role and user-management API tests; PATCH validation including 100-char boundaries and control characters; sign-in, session-expiry, details and XSS UI tests). E2E tests now sign in through the real form and API. All pass.
+
+**Portable environment (previous, 2026-10-29).** The project moved from a Windows laptop to a Mac (Apple Silicon), which had Python 3.9 and no Node. Instead of fixing one machine, Docker is now the only requirement. Details: [docs/development/setup.md](docs/development/setup.md).
 - `docker compose up -d --build` runs everything: broker, MySQL, a one-shot `init-db`, receiver, API, simulator (5 sensors) and the dashboard (production build behind nginx, which proxies `/api`). Verified on macOS arm64: all services healthy, 5 sensors reporting through the API and through the dashboard proxy.
 - `docker compose -f compose.test.yaml run --rm --build tests` runs all 241 tests in a container (Python 3.12, Node 22, Playwright Chromium) against its own broker and an in-memory MySQL. **241 passed in 50 s with no skips**, while the dev stack was running.
 - GitHub Actions ([ci.yml](.github/workflows/ci.yml)) runs the suite and a full `docker compose up` smoke test on every push.

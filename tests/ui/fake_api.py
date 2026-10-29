@@ -1,4 +1,4 @@
-"""Builders for mocked /api/sensors and /api/alerts responses."""
+"""Builders for mocked /api/sensors, /api/alerts and /api/auth/login responses."""
 
 
 def sensor(sensor_id="SENSOR-001", status="ONLINE", battery=91.87, temperature=22.46, humidity=48.04,
@@ -22,3 +22,9 @@ def alert(alert_id=1, sensor_id="SENSOR-001", alert_type="LOW_BATTERY", severity
         "id": alert_id, "sensor_id": sensor_id, "alert_type": alert_type, "severity": severity, "value": value,
         "message": message, "status": "ACTIVE", "created_at": created_at, "resolved_at": None,
     }
+
+
+def fake_session(role: str = "VIEWER", username: str = "ui-tester") -> dict:
+    """What the dashboard keeps in sessionStorage after a login (the token is never checked: API is mocked)."""
+    return {"access_token": f"fake-token-{role.lower()}", "token_type": "bearer", "expires_in": 3600,
+            "user": {"username": username, "role": role, "created_at": "2026-10-24T11:00:00Z"}}

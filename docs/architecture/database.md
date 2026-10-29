@@ -18,7 +18,7 @@ Database: `smart_iot`
 
 `id, username, password_hash, role, created_at`
 
-Roles: `ADMIN`, `OPERATOR`, `VIEWER`
+Roles: `ADMIN`, `OPERATOR`, `VIEWER`. `username` is unique. `password_hash` is a salted scrypt hash, never the password (see [auth.md](../api/auth.md)).
 
 ## firmware
 
@@ -39,7 +39,7 @@ sensors
 
 ## Implementation status
 
-`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8). `users`, `firmware`, and `firmware_updates` are still design only and arrive with their features in Phase 15.
+`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), and `users` since Phase 15c. `firmware` and `firmware_updates` arrive with FOTA.
 
 Implementation notes:
 

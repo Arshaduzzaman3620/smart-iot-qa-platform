@@ -98,6 +98,12 @@ services:
       <<: *app-env
       API_HOST: 0.0.0.0
       API_PORT: "8000"
+      # First admin, created only while the users table is empty. Dev default; set your own in .env.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
+      # Empty = a random secret per API start (everyone signs in again after a restart).
+      JWT_SECRET: ${JWT_SECRET:-}
+      TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

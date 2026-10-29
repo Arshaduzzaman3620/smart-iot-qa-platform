@@ -40,3 +40,19 @@ export interface Alert {
   created_at: string;
   resolved_at: string | null;
 }
+
+export type Role = "VIEWER" | "OPERATOR" | "ADMIN";
+
+export interface User {
+  username: string;
+  role: Role;
+  created_at: string;
+}
+
+/** POST /auth/login response, kept for the browser session. */
+export interface Session {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: User;
+}

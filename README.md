@@ -78,7 +78,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: the whole platform and test suite run in Docker on any OS, with CI on every push. Before that, **Phase 15b — batched writes**: the receiver stores messages in batches, raising its ceiling from ~33 to ~95 msg/s, with graceful shutdown. Before it, 15a added alerts and offline detection. 241 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 15c — authentication and roles** is complete: JWT sign-in, VIEWER / OPERATOR / ADMIN permissions, user management, and a dashboard with sign-in and a sensor details panel. Before it, the whole platform and test suite were made to run in Docker on any OS, with CI. 378 automated tests. Phase 15 continues with sensor commands, FOTA, reliability, security and performance. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Documentation
 
@@ -89,6 +89,7 @@ Currently: the whole platform and test suite run in Docker on any OS, with CI on
 - [MQTT topic design](docs/mqtt/topics.md)
 - [Database structure](docs/architecture/database.md)
 - [REST API](docs/api/endpoints.md)
+- [Authentication and roles](docs/api/auth.md)
 - [Web dashboard](docs/frontend/dashboard.md)
 - [Testing strategy](docs/testing/strategy.md)
 - [Manual E2E verification](docs/testing/e2e-manual-verification.md)

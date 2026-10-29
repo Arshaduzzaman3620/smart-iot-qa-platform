@@ -104,8 +104,12 @@ def test_telemetry_for_unknown_sensor_is_404(client):
 # ---- read-only surface --------------------------------------------------------------------
 
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
-def test_write_methods_not_allowed(client, seeded_sensor, method):
+def test_write_methods_not_allowed_on_the_list(client, method):
     assert getattr(client, method)("/sensors").status_code == 405
+
+
+@pytest.mark.parametrize("method", ["post", "put", "delete"])  # PATCH is the one write (Phase 15c)
+def test_write_methods_not_allowed_on_a_sensor(client, seeded_sensor, method):
     assert getattr(client, method)(f"/sensors/{seeded_sensor['sensor_id']}").status_code == 405
 
 

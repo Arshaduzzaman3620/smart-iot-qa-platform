@@ -11,6 +11,7 @@ from helpers import ROOT, port_open, wait_until
 API_PORT = int(os.getenv("API_PORT", "8000"))
 DASHBOARD_PORT = 5173
 DASHBOARD_URL = f"http://localhost:{DASHBOARD_PORT}"
+API_URL = f"http://127.0.0.1:{API_PORT}"  # not localhost: avoids a ~2 s IPv6 (::1) attempt on Windows
 
 
 def _stop(process: subprocess.Popen):

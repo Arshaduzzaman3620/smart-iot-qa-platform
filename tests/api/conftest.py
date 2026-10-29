@@ -4,12 +4,32 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from backend.app.security import create_token
 from database.models import Sensor, Telemetry
 from database.session import SessionLocal
 
 
 @pytest.fixture(scope="session")
-def client(mysql_available, clean_test_rows):
+def headers_for(test_users):
+    """headers_for("OPERATOR") -> an Authorization header for that role's test user."""
+
+    def make(role: str) -> dict:
+        username, _ = test_users[role]
+        return {"Authorization": f"Bearer {create_token(username, role)}"}
+
+    return make
+
+
+@pytest.fixture(scope="session")
+def client(mysql_available, clean_test_rows, headers_for):
+    """Signed in as a VIEWER (least privilege); pass headers=headers_for(...) for more."""
+    with TestClient(app, headers=headers_for("VIEWER")) as test_client:
+        yield test_client
+
+
+@pytest.fixture(scope="session")
+def anon_client(mysql_available):
+    """No Authorization header at all."""
     with TestClient(app) as test_client:
         yield test_client
 
