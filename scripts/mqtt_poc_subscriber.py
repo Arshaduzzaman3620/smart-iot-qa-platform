@@ -1,7 +1,7 @@
 """Phase 2 proof-of-concept: subscribe to the test topic and print incoming messages."""
 import paho.mqtt.client as mqtt
 
-BROKER_HOST = "localhost"
+BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1883
 TOPIC = "iot/sensors/SENSOR-001/telemetry"
 

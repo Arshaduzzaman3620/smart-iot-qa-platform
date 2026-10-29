@@ -13,7 +13,7 @@ logged as sent against what is in MySQL:
     failing above --max-latency (default 5 s)
   - GET /sensors response time and row count (needs the API running on API_PORT)
 
-Needs the broker and MySQL running (docker compose -f docker/docker-compose.yml up -d).
+Needs the broker and MySQL running (docker compose up -d mqtt mysql).
 """
 
 import argparse

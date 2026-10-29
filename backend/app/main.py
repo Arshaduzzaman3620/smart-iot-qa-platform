@@ -29,4 +29,5 @@ if __name__ == "__main__":
     import uvicorn
 
     # database.config has already loaded the repo-root .env by this point.
-    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("API_PORT", "8000")))
+    # Local only by default; the container sets API_HOST=0.0.0.0 so its published port works.
+    uvicorn.run(app, host=os.getenv("API_HOST", "127.0.0.1"), port=int(os.getenv("API_PORT", "8000")))

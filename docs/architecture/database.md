@@ -73,9 +73,9 @@ All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fracti
 
 ```bash
 # from the repo root
-docker compose -f docker/docker-compose.yml up -d --wait mysql
+docker compose up -d --wait mysql
 pip install -r database/requirements.txt
 python -m database.init_db        # creates any missing tables; safe to re-run
 ```
 
-The container publishes MySQL on host port **3307** so it can't collide with a locally installed MySQL on 3306. Python running on the host therefore uses `MYSQL_HOST=localhost` and `MYSQL_PORT=3307` in `.env`. The database and app user are created from `.env` on the container's first start. Root gets a random password because the app never uses it.
+The container publishes MySQL on host port **3307** so it can't collide with a locally installed MySQL on 3306. Python running on the host therefore connects to `127.0.0.1:3307`, which is also the default in `database/config.py`, so no `.env` is needed. Containers connect to `mysql:3306` on the Compose network. The database and app user are created on the container's first start (values from `.env` if present, otherwise the defaults in `compose.yaml`). Root gets a random password because the app never uses it.

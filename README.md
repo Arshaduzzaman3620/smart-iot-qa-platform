@@ -8,6 +8,20 @@ A fully simulated, fictional IoT sensor platform built to learn and demonstrate 
 
 A virtual IoT sensor sends fictional telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver service validates and stores that data in MySQL. A FastAPI backend exposes it over REST. A web dashboard displays it. Every layer of that pipeline is covered by automated tests — unit, API, MQTT, integration, end-to-end, performance, security, and reliability — built up one phase at a time.
 
+## Quick start
+
+The only requirement is [Docker Desktop](https://www.docker.com/products/docker-desktop/). The same commands work on macOS, Windows and Linux.
+
+```bash
+docker compose up -d --build                                  # the whole platform
+# dashboard: http://localhost:8080    API docs: http://localhost:8000/docs
+
+docker compose -f compose.test.yaml run --rm --build tests     # the whole test suite
+docker compose down                                           # stop
+```
+
+Running services with Python and Node on the host instead, plus troubleshooting: [docs/development/setup.md](docs/development/setup.md).
+
 ## Architecture
 
 ```text
@@ -64,10 +78,11 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 15b — batched writes** is complete: the receiver stores messages in batches, raising its ceiling from ~33 to ~95 msg/s, with graceful shutdown. Before it, 15a added alerts and offline detection. 241 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: the whole platform and test suite run in Docker on any OS, with CI on every push. Before that, **Phase 15b — batched writes**: the receiver stores messages in batches, raising its ceiling from ~33 to ~95 msg/s, with graceful shutdown. Before it, 15a added alerts and offline detection. 241 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
 
 ## Documentation
 
+- [Development setup](docs/development/setup.md)
 - [Requirements](docs/requirements/requirements.md)
 - [Architecture](docs/architecture/architecture.md)
 - [Sensor behavior](docs/architecture/sensor-behavior.md)

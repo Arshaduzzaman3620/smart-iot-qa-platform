@@ -5,7 +5,7 @@ The pipeline was scaled from 1 to **5 → 10 → 50 → 100** simulated sensors 
 ## How to reproduce
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --wait
+docker compose up -d --wait mqtt mysql    # infrastructure only
 python -m database.init_db
 python -m backend.app.main                 # optional: enables the GET /sensors timing
 # stop any receiver you started by hand -- the script runs its own

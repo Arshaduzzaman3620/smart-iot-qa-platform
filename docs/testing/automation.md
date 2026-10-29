@@ -19,9 +19,25 @@ tests/
 
 ## Running
 
+### In Docker (any machine, nothing else to install)
+
+```bash
+docker compose -f compose.test.yaml run --rm --build tests                   # everything
+docker compose -f compose.test.yaml run --rm tests pytest tests/unit -q       # any pytest arguments
+docker compose -f compose.test.yaml down                                     # stop the test broker + MySQL
+```
+
+This is what CI runs ([.github/workflows/ci.yml](../../.github/workflows/ci.yml)). The test image has Python 3.12, Node 22, Playwright's Chromium and Linux `node_modules`. It gets its own broker and an in-memory MySQL (a separate Compose project with no host ports), so it can run while the dev stack is up and never touches the dev database. `REQUIRE_SERVICES=1` is set, so a missing service fails the run. The image contains a copy of the code, so `--build` picks up your changes.
+
+### On the host (faster to iterate)
+
+Needs Python 3.12 and Node 22 (see [setup.md](../development/setup.md)).
+
 ```bash
 pip install -r tests/requirements.txt         # once
-docker compose -f docker/docker-compose.yml up -d --wait
+python -m playwright install chromium         # once
+(cd frontend && npm ci)                       # once
+docker compose up -d --wait mqtt mysql        # infrastructure only
 python -m database.init_db
 
 pytest                     # everything (~1 min)
@@ -30,7 +46,9 @@ pytest -m "unit or api"    # ...or by marker
 pytest -m "not e2e and not ui"
 ```
 
-- **Browser:** tests use the installed Google Chrome (`--browser-channel=chrome` in `pytest.ini`), so no Playwright browser download is needed. Add `--headed` to watch, or `--slowmo 500` to slow it down.
+Stop the Docker `receiver` service first (`docker compose stop receiver simulator`) if you started the full stack: the tests run their own receiver, see below.
+
+- **Browser:** tests use Playwright's bundled Chromium. Add `--browser-channel=chrome` to use an installed Google Chrome instead, `--headed` to watch, or `--slowmo 500` to slow it down.
 - **Servers:** `api_server` and `dashboard_server` reuse a FastAPI or Vite server that is already running on 8000 / 5173, and otherwise start one for the session and stop it afterwards.
 - **Receiver:** integration and e2e tests start their own `receiver/main.py` (offline check every 1 s, no startup grace; it marks any genuinely silent dev sensor OFFLINE, which is correct behavior). **Stop any receiver you started by hand first**, or every test message is stored twice and the exact-count assertions fail.
 - **Missing services:** tests that need MySQL or the broker are skipped with a reason when those aren't running. Set `REQUIRE_SERVICES=1` (e.g. in CI) to make that a failure instead.
