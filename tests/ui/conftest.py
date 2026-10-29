@@ -3,6 +3,7 @@ import json
 import pytest
 
 from browser_servers import DASHBOARD_URL
+from fake_api import fake_session
 
 
 def _mocker(page, pattern: str):
@@ -37,9 +38,27 @@ def mock_sensors_api(page, mock_alerts_api):
 
 @pytest.fixture
 def open_dashboard(page, dashboard_server):
+    """Open the dashboard already signed in (as `role`), skipping the login form."""
+
+    def open_(role: str = "VIEWER"):
+        page.add_init_script(
+            f"sessionStorage.setItem('smartiot.session', {json.dumps(json.dumps(fake_session(role)))})")
+        page.goto(DASHBOARD_URL)
+        return page
+
+    return open_
+
+
+@pytest.fixture
+def open_signed_out(page, dashboard_server):
     def open_():
         page.goto(DASHBOARD_URL)
         return page
 
     return open_
+
+
+@pytest.fixture
+def mock_login_api(page):
+    return _mocker(page, "**/api/auth/login")
 

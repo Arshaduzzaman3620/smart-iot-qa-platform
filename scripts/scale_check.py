@@ -110,12 +110,16 @@ def percentile(values, pct):
     return ordered[min(len(ordered) - 1, round(pct / 100 * (len(ordered) - 1)))]
 
 
-def measure_api(api_url: str, expected_min_rows: int, calls: int = 30):
+def measure_api(api_url: str, expected_min_rows: int, username: str, password: str, calls: int = 30):
     with httpx.Client(base_url=api_url, timeout=10) as client:
         try:
             client.get("/health", timeout=2)
+            # Every endpoint but /health needs a token since Phase 15c.
+            login = client.post("/auth/login", json={"username": username, "password": password})
+            login.raise_for_status()
         except httpx.HTTPError:
             return None
+        client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
         timings, rows = [], 0
         for _ in range(calls):
             t0 = time.perf_counter()
@@ -137,6 +141,9 @@ def main():
     # 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 ::1 first, and since the API only
     # listens on IPv4 every request would wait ~2 s for that attempt to fail.
     parser.add_argument("--api", default=f"http://127.0.0.1:{os.getenv('API_PORT', '8000')}")
+    parser.add_argument("--api-user", default=os.getenv("ADMIN_USERNAME", "admin"))
+    parser.add_argument("--api-password", default=os.getenv("ADMIN_PASSWORD", ""),
+                        help="for the GET /sensors timing; default $ADMIN_PASSWORD")
     args = parser.parse_args()
 
     logs = Path(tempfile.mkdtemp(prefix="scale_check_"))
@@ -178,7 +185,7 @@ def main():
     rejected = receiver_text.count("Rejected message")
     db_errors = receiver_text.count("Failed to store")
 
-    api = measure_api(args.api, args.sensors)
+    api = measure_api(args.api, args.sensors, args.api_user, args.api_password)
 
     print()
     print(f"sensors publishing        {len(sensor_ids)} / {args.sensors}")
@@ -195,7 +202,7 @@ def main():
         print(f"GET /sensors              {api['rows']} rows, p50 {api['p50_ms']:.1f} ms, "
               f"p95 {api['p95_ms']:.1f} ms, max {api['max_ms']:.1f} ms")
     else:
-        print(f"GET /sensors              skipped (API not reachable at {args.api})")
+        print(f"GET /sensors              skipped (API not reachable at {args.api}, or login failed)")
     print(f"logs                      {logs}")
 
     max_latency = max(latencies, default=0)
