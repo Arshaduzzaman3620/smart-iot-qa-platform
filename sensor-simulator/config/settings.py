@@ -7,6 +7,9 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# Broker account for devices (docker/mosquitto/acl). Default = the Compose dev password.
+MQTT_USERNAME = "sensor"
+MQTT_PASSWORD = os.getenv("SENSOR_MQTT_PASSWORD", "sensor-dev-password")
 # Two-level topic root: {TOPIC_ROOT}/{sensor_id}/telemetry. Only changed by reliability tests.
 TOPIC_ROOT = os.getenv("TOPIC_ROOT", "iot/sensors")
 SENSOR_INTERVAL = int(os.getenv("SENSOR_INTERVAL", "5"))

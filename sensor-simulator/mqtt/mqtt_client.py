@@ -9,8 +9,11 @@ logger = logging.getLogger("mqtt_client")
 class MQTTClient:
     """Thin wrapper around paho-mqtt: connect, publish, subscribe, reconnect, log. No sensor logic here."""
 
-    def __init__(self, host: str, port: int, client_id: str):
+    def __init__(self, host: str, port: int, client_id: str, username: str | None = None,
+                 password: str | None = None):
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
+        if username:
+            self._client.username_pw_set(username, password)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message

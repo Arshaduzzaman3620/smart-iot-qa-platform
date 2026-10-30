@@ -1,4 +1,6 @@
 """Phase 2 proof-of-concept: subscribe to the test topic and print incoming messages."""
+import os
+
 import paho.mqtt.client as mqtt
 
 BROKER_HOST = "127.0.0.1"
@@ -17,6 +19,8 @@ def on_message(client, userdata, msg):
 
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+# Since Phase 15g the broker requires sign-in; the test-harness account may use any topic.
+client.username_pw_set("qa", os.getenv("QA_MQTT_PASSWORD", "qa-dev-password"))
 client.on_connect = on_connect
 client.on_message = on_message
 

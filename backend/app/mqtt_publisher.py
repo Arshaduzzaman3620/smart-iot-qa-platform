@@ -12,9 +12,12 @@ PUBLISH_TIMEOUT = 3  # seconds to wait for the broker's PUBACK
 
 
 class CommandPublisher:
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, username: str | None = None, password: str | None = None):
         # Unique client ID: two API instances with the same ID would keep kicking each other off.
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"api-{uuid.uuid4().hex[:8]}")
+        if username:
+            # Broker account that may only send commands and firmware (docker/mosquitto/acl).
+            self._client.username_pw_set(username, password)
         self._client.on_connect = lambda c, u, f, rc, p: logger.info("Connected to MQTT broker %s:%s (%s)", host, port, rc)
         self._client.on_disconnect = lambda c, u, f, rc, p: logger.warning("Disconnected from MQTT broker (%s)", rc)
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
@@ -43,4 +46,5 @@ class CommandPublisher:
 
 
 def from_env() -> CommandPublisher:
-    return CommandPublisher(os.getenv("MQTT_HOST", "127.0.0.1"), int(os.getenv("MQTT_PORT", "1883")))
+    return CommandPublisher(os.getenv("MQTT_HOST", "127.0.0.1"), int(os.getenv("MQTT_PORT", "1883")),
+                            "api", os.getenv("API_MQTT_PASSWORD", "api-dev-password"))

@@ -28,7 +28,7 @@ The role is read from the database on **every request**, not from the token. Del
 
 | Method | Path | Role | Success | Errors |
 |---|---|---|---|---|
-| POST | `/auth/login` | none | `200` token + user | `401` wrong username or password (one message for both), `422` malformed body |
+| POST | `/auth/login` | none | `200` token + user | `401` wrong username or password (one message for both), `422` malformed body, `429` too many failures |
 | GET | `/auth/me` | any | `200` the signed-in user | `401` |
 | GET | `/users` | ADMIN | `200` users sorted by name (never the hash) | `401`, `403` |
 | POST | `/users` | ADMIN | `201` the new user | `409` name taken, `422` invalid, `401`, `403` |
@@ -58,4 +58,4 @@ Every `401` carries `WWW-Authenticate: Bearer`.
 - **First admin:** when the `users` table is empty, the API creates `ADMIN_USERNAME` (default `admin`) with `ADMIN_PASSWORD` on startup. After that, changing `ADMIN_PASSWORD` changes nothing. Manage accounts through `/users`. Compose's dev default password is `admin-dev-password`. Set your own in `.env`.
 - **Dashboard:** keeps the login response in `sessionStorage` (gone when the tab closes) and sends the token with every request. On any `401` it signs out and shows the reason. Edit controls are only shown to OPERATOR and above, but the API enforces every permission itself.
 
-Rate limiting of login attempts is added in the security part (15g).
+**Rate limiting** (Phase 15g): 5 failed logins for a username (from anywhere), or 20 from one client, within 5 minutes → `429 {"detail": "Too many failed attempts, try again later"}` with `Retry-After`. A correct password then also gets `429`, so guessing can't continue. A successful login clears the username's count. Behind the dashboard's nginx, the client is the address nginx reports (`X-Real-IP`, trusted only with `TRUST_PROXY=1`). Tunable with `LOGIN_MAX_FAILURES_PER_USER`, `LOGIN_MAX_FAILURES_PER_CLIENT` and `LOGIN_FAILURE_WINDOW`. See [security.md](../security/security.md).

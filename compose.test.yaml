@@ -10,8 +10,14 @@ name: smart-iot-test
 services:
   mqtt:
     image: eclipse-mosquitto:2
+    entrypoint: ["/bin/sh", "/mosquitto/config/entrypoint.sh"]
+    environment:
+      SENSOR_MQTT_PASSWORD: sensor-test
+      RECEIVER_MQTT_PASSWORD: receiver-test
+      API_MQTT_PASSWORD: api-test
+      QA_MQTT_PASSWORD: qa-test
     volumes:
-      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto:/mosquitto/config:ro
 
   mysql:
     image: mysql:8.4
@@ -45,6 +51,10 @@ services:
       MYSQL_PASSWORD: test-only
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
+      SENSOR_MQTT_PASSWORD: sensor-test
+      RECEIVER_MQTT_PASSWORD: receiver-test
+      API_MQTT_PASSWORD: api-test
+      QA_MQTT_PASSWORD: qa-test
       # A missing service is a failure here, not a skip.
       REQUIRE_SERVICES: "1"
       INIT_DB_WAIT: "60"

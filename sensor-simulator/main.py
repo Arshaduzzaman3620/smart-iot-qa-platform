@@ -281,7 +281,9 @@ def main():
 
     generator = DataGenerator()
     sensors = {s.sensor_id: s for s in fleet}
-    clients = {s.sensor_id: MQTTClient(settings.MQTT_HOST, settings.MQTT_PORT, client_id=s.sensor_id) for s in fleet}
+    clients = {s.sensor_id: MQTTClient(settings.MQTT_HOST, settings.MQTT_PORT, client_id=s.sensor_id,
+                                       username=settings.MQTT_USERNAME, password=settings.MQTT_PASSWORD)
+               for s in fleet}
     for sensor in fleet:
         sensor.interval = settings.SENSOR_INTERVAL
         client = clients[sensor.sensor_id]

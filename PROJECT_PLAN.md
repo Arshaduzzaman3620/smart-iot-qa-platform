@@ -17,7 +17,7 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
 - [x] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
 - [x] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
-- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
+- [x] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
   - [x] **15a** — Threshold alerts and offline detection
   - [x] **15b** — Receiver throughput: batched writes
   - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
@@ -25,8 +25,8 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15d** — Sensor commands
   - [x] **15e** — FOTA (firmware over the air)
   - [x] **15f** — Reliability and failure injection
-  - [ ] **15g** — Security and performance *(next)*
-- [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
+  - [x] **15g** — Security and performance
+- [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression *(next)*
 
 ## Definition of Done (per phase)
 
@@ -51,7 +51,15 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15f complete: reliability and failure injection.** Details: [docs/testing/reliability.md](docs/testing/reliability.md).
+**Phase 15g complete: security and performance. Phase 15 is done.** Details: [docs/security/security.md](docs/security/security.md), [docs/testing/performance.md](docs/testing/performance.md).
+- **MQTT security:** no anonymous access. Four accounts (`sensor`, `receiver`, `api`, `qa` for tests), passwords from the environment, written to the broker's password file at start. ACLs limit each account to its own topics. Verified on the live broker: anonymous and wrong-password clients are refused, and a `sensor` account's forged RESTART command never arrives.
+- **API security:** login rate limiting (5 failures per username, 20 per client, per 5 min → 429 + Retry-After). Security headers on every response (strict CSP, nosniff, DENY framing, no-referrer, no-store), and a strict CSP on the dashboard: the real build runs with **no CSP violations** in a browser. No CORS. Hostile-input tests (SQL injection, traversal, oversized and malformed bodies). `pip-audit` and `npm audit` in CI.
+- **Performance (k6, in Docker):** load (50 VUs) 144 req/s, p95 38 ms, 0 % errors. Soak 0 % errors, flat memory. Stress and spike up to 300 VUs: **0 % errors, 303 req/s, max 0.7 s.** Ingestion at 100 sensors: 100 msg/s stored with 0 missing, 0 duplicates, max latency 1 s.
+- **Defects found by the load tests:** (1) **A DB connection leak killed the API** after a stress run: sync session cleanup never ran for requests cancelled under overload, so `/health` never answered again. The session now closes in an async dependency, and pool exhaustion gives a fast `503 Database busy`. (2) **Throughput collapsed in a spike** (29 req/s, 13 % failed): requests held connections while waiting for worker threads. Auth now uses its own short session, and the pool matches the threads. (3) **Admission:** a concurrency limit (32 in flight, others wait outside holding nothing). Result: 124 → 303 req/s, 1.1 % → 0 % errors, max 60 s → 0.7 s.
+- Also: dashboard buttons no longer wrap. Test-isolation fixes (an async test helper that runs alongside Playwright, unique test module names).
+- Tests: 686 (66 new: MQTT ACLs, rate limiting, headers, hostile input, middleware). All pass.
+
+**Phase 15f (previous): reliability and failure injection.** Details: [docs/testing/reliability.md](docs/testing/reliability.md).
 - The pipeline is now **at-least-once with deduplication**. MySQL down: the receiver holds and retries (was: dropped). Broker unreachable: sensors buffer up to 1000 readings and resend in order (was: dropped). Receiver down or crashed: persistent MQTT session + QoS 1, so the broker queues for it. Broker restart: Mosquitto persistence. Redeliveries and resends: identical readings stored once. Offline detection pauses during an outage and its backlog. This closes the Phase 12 "no buffering" limitation.
 - Fault injection: `FAULT_INVALID_RATE` / `FAULT_MALFORMED_RATE` / `FAULT_DUPLICATE_RATE` in the simulator, and an in-test TCP proxy that cuts MySQL or the broker without Docker access, so it works the same in CI.
 - New `tests/reliability` layer: MySQL outage (50 held, stored 5.3 s after recovery), broker outage (75 buffered, stored 5.4 s after), receiver SIGKILL (50 queued, stored 0.3 s after restart), faulty sensors. **0 lost and 0 duplicates in every scenario.** Verified on the real stack too: `docker compose stop mysql` 20 s → 48 sent, 48 stored; `docker compose restart mqtt` → 0 duplicates.

@@ -78,7 +78,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 15f — reliability** is complete: no reading is lost or stored twice when MySQL, the broker or the receiver fails, proved by a reliability test layer that cuts connections on purpose. Before it: firmware over the air (15e), sensor commands (15d), JWT sign-in with roles (15c), and Docker-everywhere with CI. 620 automated tests. Next: security and performance. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
+Currently: **Phase 15 is complete.** Authentication and roles, sensor commands, firmware over the air, reliability (no loss through outages), MQTT and API security, and load-tested performance (303 req/s, 0 % errors at 300 virtual users). 686 automated tests across 7 layers, all running in Docker with CI. Next: Phase 16, final polish and the AI QA assistant. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Documentation
 
@@ -99,3 +99,5 @@ Currently: **Phase 15f — reliability** is complete: no reading is lost or stor
 - [Sensor commands](docs/architecture/commands.md)
 - [Firmware over the air](docs/architecture/fota.md)
 - [Reliability and failure injection](docs/testing/reliability.md)
+- [Security](docs/security/security.md)
+- [Performance](docs/testing/performance.md)
