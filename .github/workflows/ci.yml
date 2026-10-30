@@ -45,3 +45,30 @@ jobs:
       - name: Stop
         if: always()
         run: docker compose down -v
+
+  audit:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python packages (pip-audit, OSV / PyPI advisories)
+        run: |
+          pip install pip-audit==2.7.3
+          pip-audit -r backend/requirements.txt -r receiver/requirements.txt \
+                    -r sensor-simulator/requirements.txt -r tests/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Dashboard packages (npm audit, shipped dependencies)
+        working-directory: frontend
+        run: |
+          npm ci --no-fund
+          npm audit --omit=dev --audit-level=high

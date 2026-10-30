@@ -79,3 +79,13 @@ def broker():
     app.dependency_overrides[get_publisher] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_publisher, None)
+
+
+@pytest.fixture(autouse=True)
+def fresh_login_limits():
+    """Failed logins in one test must not lock accounts in the next (backend/app/rate_limit.py)."""
+    from backend.app.api.auth import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()

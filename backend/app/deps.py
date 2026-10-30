@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -12,10 +12,18 @@ from database.session import SessionLocal
 from .security import decode_token, role_allows
 
 
-def get_db() -> Iterator[Session]:
-    """One session per request, always closed afterwards."""
-    with SessionLocal() as session:
+async def get_db() -> AsyncIterator[Session]:
+    """One session per request, always closed afterwards, also when the client gives up.
+
+    Async on purpose (the endpoints using it stay sync). FastAPI runs a sync dependency's cleanup on a
+    worker thread; under overload all of them were busy, so cancelled requests never returned their
+    connections and the pool stayed exhausted after the load ended (docs/testing/performance.md).
+    Closing on the event loop needs no worker thread."""
+    session = SessionLocal()
+    try:
         yield session
+    finally:
+        session.close()
 
 
 _bearer = HTTPBearer(auto_error=False)
@@ -25,10 +33,7 @@ def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"})
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    db: Session = Depends(get_db),
-) -> User:
+def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> User:
     if credentials is None:
         raise _unauthorized("Not authenticated")
     try:
@@ -41,8 +46,13 @@ def get_current_user(
         # A firmware download token is not a login: it must never open the rest of the API.
         raise _unauthorized("Invalid token")
     # The user is looked up on every request, so deleting a user or changing their role takes
-    # effect at once instead of when their token expires.
-    user = db.scalar(select(User).where(User.username == claims["sub"]))
+    # effect at once instead of when their token expires. Own short session, returned to the pool
+    # straight away: holding the request's connection while it waits for a worker thread for the
+    # endpoint starved the pool under a load spike (docs/testing/performance.md).
+    with SessionLocal() as session:
+        user = session.scalar(select(User).where(User.username == claims["sub"]))
+        if user is not None:
+            session.expunge(user)
     if user is None:
         raise _unauthorized("Invalid token")
     return user

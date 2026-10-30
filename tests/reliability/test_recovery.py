@@ -28,7 +28,7 @@ def test_mysql_outage_holds_messages_and_stores_them_after(harness):
     harness.wait_until_all_stored(timeout=30)
     total = harness.assert_no_loss_no_duplicates()
     assert "Database back after" in harness.log("receiver")
-    assert harness.offline_alerts() == 0
+    assert harness.offline_alerts() == 0, [l for l in harness.log("receiver").splitlines() if "OFFLINE" in l]
     assert recovery < 20
     report("mysql outage", outage_s=OUTAGE_SECONDS, held=held_at_restore, readings=total,
            backlog_stored_s=round(recovery, 1), lost=0, duplicates=0)

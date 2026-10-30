@@ -43,9 +43,7 @@ def start_simulator(stack, tmp_path):
     import sys
     import uuid
 
-    import paho.mqtt.client as mqtt
-
-    from helpers import MQTT_HOST, MQTT_PORT, ROOT, wait_until
+    from helpers import MQTT_HOST, MQTT_PORT, ROOT, mqtt_client, wait_until
 
     started = []
 
@@ -69,7 +67,7 @@ def start_simulator(stack, tmp_path):
 
     yield start
 
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client = mqtt_client()
     client.connect(MQTT_HOST, MQTT_PORT)
     client.loop_start()
     for process, sensor_id in started:

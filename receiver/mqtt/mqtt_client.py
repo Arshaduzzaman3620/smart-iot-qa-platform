@@ -8,13 +8,16 @@ logger = logging.getLogger("receiver.mqtt_client")
 class MQTTSubscriber:
     """Thin wrapper around paho-mqtt: connect, subscribe, reconnect, log. No parsing/validation here."""
 
-    def __init__(self, host: str, port: int, client_id: str = "receiver", persistent_session: bool = True):
+    def __init__(self, host: str, port: int, client_id: str = "receiver", persistent_session: bool = True,
+                 username: str | None = None, password: str | None = None):
         # Persistent session (clean_session=False) + QoS 1: while the receiver is down or restarting,
         # the broker queues its messages and delivers them on reconnect, instead of dropping them.
         # manual_ack: a QoS 1 message is acknowledged only when the receiver calls ack(), i.e. after it is
         # stored -- not when the callback returns, when it is merely queued in memory.
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id,
                                    clean_session=not persistent_session, manual_ack=True)
+        if username:
+            self._client.username_pw_set(username, password)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)

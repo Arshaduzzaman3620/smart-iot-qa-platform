@@ -68,4 +68,4 @@ Stopping the simulator freezes the "latest" reading so every layer can be compar
 
 - **Stale ONLINE status:** after the simulator stopped, SENSOR-001 still shows ONLINE, with only "last seen" growing. Nothing marks a silent sensor OFFLINE. Fixed in Phase 15a: offline detection, see [alerts.md](../architecture/alerts.md).
 - ~~**No buffering on outages**~~: fixed in Phase 15f. Sensors buffer while the broker is unreachable, the receiver holds messages while MySQL is down, and the broker queues for a restarting receiver. See [reliability.md](reliability.md).
-- **Sensor metadata not propagated:** `name`, `location`, and `firmware_version` stay `null` in `sensors` because telemetry messages don't carry them. Planned: sensor registration/metadata (Phase 15).
+- ~~**Sensor metadata not propagated**~~: fixed in Phase 15d. Sensors announce name, location and firmware on their retained `status` topic. See [commands.md](../architecture/commands.md).

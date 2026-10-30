@@ -6,10 +6,9 @@ import subprocess
 import sys
 import uuid
 
-import paho.mqtt.client as mqtt
 import pytest
 
-from helpers import MQTT_HOST, MQTT_PORT, ROOT, wait_until
+from helpers import MQTT_HOST, MQTT_PORT, ROOT, mqtt_client, wait_until
 
 
 @pytest.fixture(scope="session")
@@ -49,7 +48,7 @@ def receiver_process(broker_available, mysql_available, clean_test_rows, tmp_pat
 
 @pytest.fixture(scope="session")
 def mqtt_publisher(broker_available):
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"pytest-pub-{uuid.uuid4().hex[:8]}")
+    client = mqtt_client(f"pytest-pub-{uuid.uuid4().hex[:8]}")
     client.connect(MQTT_HOST, MQTT_PORT)
     client.loop_start()
 
