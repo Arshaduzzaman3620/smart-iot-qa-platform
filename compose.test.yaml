@@ -55,6 +55,8 @@ services:
       RECEIVER_MQTT_PASSWORD: receiver-test
       API_MQTT_PASSWORD: api-test
       QA_MQTT_PASSWORD: qa-test
+      # Only for running the AI QA assistant in this container (the tests never call the API).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # A missing service is a failure here, not a skip.
       REQUIRE_SERVICES: "1"
       INIT_DB_WAIT: "60"

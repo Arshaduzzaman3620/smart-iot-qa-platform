@@ -47,6 +47,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # Playwright's own Chromium (matches the pinned playwright version, works on amd64 and arm64).
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY tests/requirements.txt tests/
+COPY qa-assistant/requirements.txt qa-assistant/
 RUN pip install -r tests/requirements.txt && playwright install --with-deps chromium
 
 # Linux node_modules built inside the image, never the host's (esbuild ships per-OS binaries).
