@@ -46,6 +46,8 @@ A sensor becomes `ONLINE` when the receiver stores a reading from it, and `OFFLI
 - starts from different, valid readings (only when `SENSOR_COUNT > 1`; a single sensor keeps the original defaults);
 - publishes on a fixed schedule, with first publishes spread evenly across one interval so the fleet doesn't send in bursts.
 
+Telemetry is published at QoS 1. While the broker is unreachable, each sensor keeps up to `SENSOR_BUFFER_MAX` (1000) readings and sends them in order after reconnecting. `FAULT_INVALID_RATE`, `FAULT_MALFORMED_RATE` and `FAULT_DUPLICATE_RATE` inject bad messages ([reliability.md](../testing/reliability.md)).
+
 `SENSOR_ID_PREFIX` (default `SENSOR-`) changes the ID prefix. Tests run the real simulator as `TEST-SIMxxxxxx-001` so they never collide with real sensors.
 
 Each sensor also announces its metadata on `iot/sensors/{id}/status` (retained) when it connects, and carries out `REQUEST_TELEMETRY`, `SET_INTERVAL` and `RESTART` commands from `iot/sensors/{id}/command`. Commands are queued from the MQTT threads and run on the main loop, which owns all sensor state. See [commands.md](commands.md).
