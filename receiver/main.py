@@ -15,9 +15,10 @@ from mqtt.mqtt_client import MQTTSubscriber
 from parser.message_parser import MessageParser, ParseError
 from storage.batch_writer import BatchWriter
 from storage.command_repository import CommandRepository
+from storage.firmware_repository import FirmwareRepository
 from storage.offline_detector import OfflineDetector
 from storage.telemetry_repository import TelemetryRepository
-from validator.device_message_validator import validate_response, validate_status
+from validator.device_message_validator import validate_firmware_status, validate_response, validate_status
 from validator.telemetry_validator import TelemetryValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -28,6 +29,8 @@ TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
 # Phase 15d: sensors answer commands on .../response and describe themselves on .../status.
 RESPONSE_TOPIC = "iot/sensors/+/response"
 STATUS_TOPIC = "iot/sensors/+/status"
+FIRMWARE_STATUS_TOPIC = "iot/sensors/+/firmware_status"  # Phase 15e: firmware update progress
+TOPICS = [TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC, FIRMWARE_STATUS_TOPIC]
 
 # Set by Ctrl+C / SIGTERM (e.g. `docker stop`) / Ctrl+Break on Windows. Stopping disconnects from
 # the broker first, then lets the writer store every message it already accepted.
@@ -63,6 +66,7 @@ def log_failed(data: dict, exc: Exception):
 
 writer = BatchWriter(TelemetryRepository(), log_saved, log_failed, max_batch=settings.RECEIVER_BATCH_MAX)
 commands = CommandRepository()
+firmware = FirmwareRepository()
 
 
 def topic_sensor_id(topic: str) -> str:
@@ -85,6 +89,8 @@ def on_message(client, userdata, msg):
         return on_response(msg.topic, data)
     if kind == "status":
         return on_status(msg.topic, data)
+    if kind == "firmware_status":
+        return on_firmware_status(msg.topic, data)
 
     errors = TelemetryValidator.validate(data)
     if not errors and data["sensor_id"] != topic_sensor_id(msg.topic):
@@ -134,6 +140,24 @@ def on_status(topic: str, data: dict):
     logger.info("Status from %s: firmware %s, %s", sensor_id, data.get("firmware_version"), data.get("name"))
 
 
+def on_firmware_status(topic: str, data: dict):
+    errors = validate_firmware_status(data)
+    if errors:
+        logger.warning("Rejected firmware status on %s: %s", topic, "; ".join(errors))
+        return
+    sensor_id = topic_sensor_id(topic)
+    try:
+        ignored = firmware.progress(sensor_id, data["update_id"], data["status"], data.get("message"))
+    except SQLAlchemyError as exc:
+        logger.error("Failed to store firmware status from %s: %s", sensor_id, getattr(exc, "orig", exc))
+        return
+    if ignored:
+        logger.warning("Ignored firmware status from %s for update %s: %s", sensor_id, data["update_id"], ignored)
+    else:
+        log = logger.warning if data["status"] == "FAILED" else logger.info
+        log("Firmware update %s on %s: %s %s", data["update_id"], sensor_id, data["status"], data.get("message") or "")
+
+
 def expire_commands():
     try:
         expired = commands.expire(settings.COMMAND_TIMEOUT)
@@ -142,6 +166,13 @@ def expire_commands():
         return
     if expired:
         logger.warning("%d command(s) timed out (no response within %g s)", expired, settings.COMMAND_TIMEOUT)
+    try:
+        expired = firmware.expire(settings.FOTA_TIMEOUT)
+    except SQLAlchemyError as exc:
+        logger.error("Firmware timeout check failed: %s", getattr(exc, "orig", exc))
+        return
+    if expired:
+        logger.warning("%d firmware update(s) timed out (no progress for %g s)", expired, settings.FOTA_TIMEOUT)
 
 
 def check_offline(detector: OfflineDetector):
@@ -159,8 +190,8 @@ def main():
     writer.start()
     mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id="receiver")
     mqtt_client.set_message_handler(on_message)
-    mqtt_client.connect([TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC])
-    logger.info("Receiver starting, subscribing to %s, %s, %s", TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC)
+    mqtt_client.connect(TOPICS)
+    logger.info("Receiver starting, subscribing to %s", ", ".join(TOPICS))
 
     detector = OfflineDetector(settings.OFFLINE_TIMEOUT)
     next_check = time.monotonic() + settings.OFFLINE_STARTUP_GRACE

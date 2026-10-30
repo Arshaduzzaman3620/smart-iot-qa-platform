@@ -1,35 +1,13 @@
 """POST/GET sensor commands (Phase 15d). MQTT is replaced by a fake publisher, so every test can
 check exactly what would have been published, and can simulate the broker being down."""
 
-import json
-
 import pytest
 
-from backend.app.api.commands import get_publisher
-from backend.app.main import app
 from database.models import Command
 from database.session import SessionLocal
 
 COMMAND_FIELDS = {"id", "sensor_id", "command", "params", "status", "message", "requested_by", "created_at",
                   "completed_at"}
-
-
-class FakePublisher:
-    def __init__(self):
-        self.sent, self.up = [], True
-
-    def publish(self, topic, payload):
-        if self.up:
-            self.sent.append((topic, json.loads(payload)))
-        return self.up
-
-
-@pytest.fixture
-def broker():
-    fake = FakePublisher()
-    app.dependency_overrides[get_publisher] = lambda: fake
-    yield fake
-    app.dependency_overrides.pop(get_publisher, None)
 
 
 @pytest.fixture

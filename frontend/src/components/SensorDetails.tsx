@@ -4,6 +4,7 @@ import { ApiError, AuthError, fetchSensorAlerts, fetchTelemetry, updateSensor } 
 import { formatNumber, formatRelative } from "../format";
 import type { Alert, Sensor, Telemetry } from "../types";
 import { CommandsPanel } from "./CommandsPanel";
+import { FirmwarePanel } from "./FirmwarePanel";
 
 const HISTORY_ROWS = 20;
 
@@ -61,6 +62,8 @@ export function SensorDetails({ sensor, now, canEdit, onClose, onAuthError, onUp
       {canEdit && <EditSensor sensor={sensor} onAuthError={onAuthError} onUpdated={onUpdated} />}
 
       <CommandsPanel sensorId={sensor.sensor_id} now={now} canSend={canEdit} onAuthError={onAuthError} />
+
+      <FirmwarePanel sensor={sensor} now={now} canUpdate={canEdit} onAuthError={onAuthError} />
 
       {error && <div role="alert" className="error" data-testid="details-error">{error}</div>}
 

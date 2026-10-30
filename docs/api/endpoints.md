@@ -25,6 +25,12 @@ Interactive docs: `http://localhost:8000/docs` (Swagger UI), `http://localhost:8
 | POST | `/sensors/{sensor_id}/commands` | `202` the command, `SENT` (OPERATOR+, see [commands.md](../architecture/commands.md)) | `404`, `422`, `503` broker unreachable |
 | GET | `/sensors/{sensor_id}/commands?limit=N` | `200` newest first (default 20) | `404`, `422` |
 | GET | `/commands/{id}` | `200` one command and its outcome | `404` |
+| POST | `/firmware?version=1.1.0&filename=` | `201` (ADMIN; raw bytes body, see [fota.md](../architecture/fota.md)) | `409`, `413` > 1 MiB, `422` |
+| GET | `/firmware` | `200` images, newest first (no bytes) | |
+| GET | `/firmware/{id}/download?token=` | `200` the bytes (download token, not a login) | `401`, `404` |
+| POST | `/sensors/{sensor_id}/firmware-updates` | `202` the update, `REQUESTED` (OPERATOR+) | `404`, `409`, `422`, `503` |
+| GET | `/sensors/{sensor_id}/firmware-updates?limit=N` | `200` newest first | `404`, `422` |
+| GET | `/firmware-updates/{id}` | `200` one update and its status | `404` |
 | GET | `/alerts?status=&sensor_id=&limit=N` | `200` alerts, newest first | `422` bad `status` or `limit`, `503` |
 
 `limit` defaults to 100. `status` is `ACTIVE` or `RESOLVED` (exact case), or omitted for both. An unknown `sensor_id` filter on `/alerts` returns `[]`. All datetimes are UTC ISO 8601 with a `Z` suffix, for example `2026-10-24T12:41:41Z`.

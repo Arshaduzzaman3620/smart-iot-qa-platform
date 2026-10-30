@@ -19,8 +19,8 @@ Each role can do everything the roles before it can.
 | Role | Can |
 |---|---|
 | `VIEWER` | Read sensors, telemetry and alerts (`GET` endpoints), and `GET /auth/me` |
-| `OPERATOR` | Also change a sensor's name and location (`PATCH /sensors/{id}`). Later parts add sending commands and starting firmware updates. |
-| `ADMIN` | Also manage users (`/users`). Later parts add uploading firmware. |
+| `OPERATOR` | Also change a sensor's name and location (`PATCH /sensors/{id}`), send commands, and start firmware updates |
+| `ADMIN` | Also manage users (`/users`) and upload firmware |
 
 The role is read from the database on **every request**, not from the token. Deleting a user or changing their role therefore takes effect immediately, and a token can't grant more than its user has. A token that claims `ADMIN` for a `VIEWER` still only gets `VIEWER` rights.
 

@@ -21,3 +21,5 @@ RECEIVER_BATCH_MAX = int(os.getenv("RECEIVER_BATCH_MAX", "200"))
 
 # A command still unanswered after this many seconds becomes TIMED_OUT (checked with the offline check).
 COMMAND_TIMEOUT = float(os.getenv("COMMAND_TIMEOUT", "30"))
+# A firmware update with no progress report for this many seconds becomes TIMED_OUT.
+FOTA_TIMEOUT = float(os.getenv("FOTA_TIMEOUT", "300"))

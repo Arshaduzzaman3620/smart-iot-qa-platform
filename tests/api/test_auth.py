@@ -14,6 +14,8 @@ PROTECTED = [
     ("GET", "/alerts"), ("GET", "/auth/me"), ("PATCH", "/sensors/X"),
     ("GET", "/users"), ("POST", "/users"), ("DELETE", "/users/someone"),
     ("POST", "/sensors/X/commands"), ("GET", "/sensors/X/commands"), ("GET", "/commands/1"),
+    ("GET", "/firmware"), ("POST", "/firmware"), ("POST", "/sensors/X/firmware-updates"),
+    ("GET", "/sensors/X/firmware-updates"), ("GET", "/firmware-updates/1"),
 ]
 
 # 32+ bytes, so PyJWT does not warn; it is still the wrong key.

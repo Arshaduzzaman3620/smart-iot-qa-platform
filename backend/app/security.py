@@ -67,6 +67,19 @@ def create_token(username: str, role: str, minutes: int = TOKEN_MINUTES, now: da
     return jwt.encode(claims, JWT_SECRET, algorithm=TOKEN_ALGORITHM)
 
 
+DOWNLOAD_SCOPE = "firmware:download"
+DOWNLOAD_TOKEN_MINUTES = 10
+
+
+def create_download_token(firmware_id: int, sensor_id: str, minutes: int = DOWNLOAD_TOKEN_MINUTES,
+                          now: datetime | None = None) -> str:
+    """Lets one sensor download one firmware image for a few minutes -- sensors have no user account."""
+    issued = now or datetime.now(timezone.utc)
+    claims = {"sub": sensor_id, "scope": DOWNLOAD_SCOPE, "fw": firmware_id, "iat": issued,
+              "exp": issued + timedelta(minutes=minutes)}
+    return jwt.encode(claims, JWT_SECRET, algorithm=TOKEN_ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     """The token's claims. Raises jwt.InvalidTokenError if it is malformed, tampered with or expired."""
     # `algorithms` pinned: never accept "none" or an algorithm the client picked.

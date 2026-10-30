@@ -6,11 +6,12 @@
 | Status | `iot/sensors/{sensor_id}/status` |
 | Command | `iot/sensors/{sensor_id}/command` |
 | Response | `iot/sensors/{sensor_id}/response` |
-| Firmware | `iot/sensors/{sensor_id}/firmware` |
+| Firmware | `iot/sensors/{sensor_id}/firmware` (API → sensor) |
+| Firmware progress | `iot/sensors/{sensor_id}/firmware_status` (sensor → receiver) |
 
 Example: `iot/sensors/SENSOR-001/telemetry`
 
-The receiver subscribes with wildcards to catch every sensor: `iot/sensors/+/telemetry`, and since Phase 15d `iot/sensors/+/response` and `iot/sensors/+/status`. Each sensor subscribes to its own `iot/sensors/{id}/command`. Command, response and status payloads, and why status is retained: [commands.md](../architecture/commands.md). `firmware` is used by FOTA.
+The receiver subscribes with wildcards to catch every sensor: `iot/sensors/+/telemetry`, and since Phase 15d `iot/sensors/+/response` and `iot/sensors/+/status`. Each sensor subscribes to its own `iot/sensors/{id}/command`. Command, response and status payloads, and why status is retained: [commands.md](../architecture/commands.md). Firmware update messages and progress reports: [fota.md](../architecture/fota.md).
 
 ## Telemetry message
 
