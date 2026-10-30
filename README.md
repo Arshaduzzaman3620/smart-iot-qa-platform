@@ -78,7 +78,7 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 15c — authentication and roles** is complete: JWT sign-in, VIEWER / OPERATOR / ADMIN permissions, user management, and a dashboard with sign-in and a sensor details panel. Before it, the whole platform and test suite were made to run in Docker on any OS, with CI. 378 automated tests. Phase 15 continues with sensor commands, FOTA, reliability, security and performance. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
+Currently: **Phase 15d — sensor commands** is complete: operators restart sensors, request readings and change intervals from the dashboard, through the API and MQTT, with each command's outcome tracked. Before it: JWT sign-in with VIEWER / OPERATOR / ADMIN roles (15c), and the whole platform and test suite running in Docker on any OS, with CI. 490 automated tests. Phase 15 continues with FOTA, reliability, security and performance. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Documentation
 
@@ -96,3 +96,4 @@ Currently: **Phase 15c — authentication and roles** is complete: JWT sign-in, 
 - [Test automation](docs/testing/automation.md)
 - [Multi-sensor scale results](docs/testing/scale-results.md)
 - [Alerts and offline detection](docs/architecture/alerts.md)
+- [Sensor commands](docs/architecture/commands.md)

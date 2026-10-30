@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, AuthError, fetchSensorAlerts, fetchTelemetry, updateSensor } from "../api";
 import { formatNumber, formatRelative } from "../format";
 import type { Alert, Sensor, Telemetry } from "../types";
+import { CommandsPanel } from "./CommandsPanel";
 
 const HISTORY_ROWS = 20;
 
@@ -58,6 +59,8 @@ export function SensorDetails({ sensor, now, canEdit, onClose, onAuthError, onUp
       </dl>
 
       {canEdit && <EditSensor sensor={sensor} onAuthError={onAuthError} onUpdated={onUpdated} />}
+
+      <CommandsPanel sensorId={sensor.sensor_id} now={now} canSend={canEdit} onAuthError={onAuthError} />
 
       {error && <div role="alert" className="error" data-testid="details-error">{error}</div>}
 

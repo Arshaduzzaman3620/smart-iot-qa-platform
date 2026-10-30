@@ -44,3 +44,15 @@ def test_start_offsets_spread_evenly_across_one_interval():
     assert offsets == [0.0, 1.0, 2.0, 3.0, 4.0]
     assert all(0 <= o < 5 for o in start_offsets(100, 5))
     assert len(set(start_offsets(100, 5))) == 100
+
+
+def test_custom_id_prefix():
+    # Tests run the real simulator with their own prefix, so they never collide with SENSOR-001...
+    assert sensor_ids(2, "TEST-SIM1-") == ["TEST-SIM1-001", "TEST-SIM1-002"]
+    assert [s.sensor_id for s in create_fleet(2, prefix="X-")] == ["X-001", "X-002"]
+
+
+def test_sensor_describes_itself_for_the_status_topic():
+    (sensor,) = create_fleet(1)
+    assert sensor.describe() == {"sensor_id": "SENSOR-001", "sensor_type": "ENVIRONMENT", "name": "Room 1 Sensor",
+                                 "location": "Room-1", "firmware_version": "1.0.0", "interval": 5}

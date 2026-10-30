@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, DateTime, Double, ForeignKey, Index, String, 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Schema per docs/architecture/database.md. Tables arrive with their features: sensors, telemetry,
-# alerts (Phase 8), users (15c).
+# alerts (Phase 8), users (15c), commands (15d).
 
 
 class Base(DeclarativeBase):
@@ -96,3 +96,27 @@ class User(Base):
     # VIEWER < OPERATOR < ADMIN, see docs/api/auth.md.
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="VIEWER")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class Command(Base):
+    """A command sent to a sensor over MQTT and what became of it.
+
+    SENT (published) -> SUCCEEDED / FAILED (the sensor's response) or TIMED_OUT (no response in
+    time). FAILED is also used when the API could not publish it at all.
+    """
+
+    __tablename__ = "commands"
+    __table_args__ = (Index("ix_commands_sensor_created", "sensor_id", "created_at"),
+                      Index("ix_commands_status_created", "status", "created_at"))
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    sensor_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False
+    )
+    command: Mapped[str] = mapped_column(String(30), nullable=False)  # RESTART / REQUEST_TELEMETRY / SET_INTERVAL
+    params: Mapped[str | None] = mapped_column(String(255))  # JSON, e.g. {"interval": 10}
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="SENT")
+    message: Mapped[str | None] = mapped_column(String(255))  # the sensor's response, or why it failed
+    requested_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)

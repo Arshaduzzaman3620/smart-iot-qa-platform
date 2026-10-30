@@ -166,3 +166,10 @@ tr.selected td { background: var(--bg); }
 .edit label { flex: 1 1 160px; }
 .plain { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 0.9375rem; }
 .badge-resolved { background: var(--online-bg); color: var(--online); }
+
+/* ---- Phase 15d: commands ---- */
+form.inline { display: flex; align-items: end; gap: 8px; }
+form.inline input { width: 6em; }
+.badge-cmd-sent { background: var(--warning-bg); color: var(--warning); }
+.badge-cmd-succeeded { background: var(--online-bg); color: var(--online); }
+.badge-cmd-failed, .badge-cmd-timed_out { background: var(--error-bg); color: var(--error); }

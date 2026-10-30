@@ -12,7 +12,8 @@ from sqlalchemy.exc import OperationalError
 
 from database.session import SessionLocal
 
-from .api import alerts, auth, health, sensors, users
+from . import mqtt_publisher
+from .api import alerts, auth, commands, health, sensors, users
 from .bootstrap import ensure_admin
 from .security import JWT_SECRET, JWT_SECRET_CONFIGURED
 
@@ -28,7 +29,10 @@ async def lifespan(app: FastAPI):
         # HS256 with a short key can be brute-forced offline from any token (RFC 7518 3.2).
         logger.warning("JWT_SECRET is shorter than 32 bytes: use a longer random value")
     ensure_admin(SessionLocal, os.getenv("ADMIN_USERNAME", "admin"), os.getenv("ADMIN_PASSWORD", ""))
+    app.state.publisher = mqtt_publisher.from_env()
+    app.state.publisher.start()
     yield
+    app.state.publisher.stop()
 
 
 app = FastAPI(title="SmartIoT Sensor API", version="0.2.0", lifespan=lifespan)
@@ -37,6 +41,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(sensors.router)
 app.include_router(alerts.router)
+app.include_router(commands.router)
 
 
 @app.exception_handler(OperationalError)

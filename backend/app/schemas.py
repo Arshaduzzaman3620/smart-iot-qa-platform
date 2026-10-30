@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -126,3 +127,43 @@ class SensorUpdateIn(_StrictIn):
         if not self.model_fields_set:
             raise ValueError("send at least one of: name, location")
         return self
+
+
+# ---- sensor commands (Phase 15d) ------------------------------------------------------------
+
+CommandName = Literal["RESTART", "REQUEST_TELEMETRY", "SET_INTERVAL"]
+MIN_INTERVAL, MAX_INTERVAL = 1, 3600  # seconds between readings
+
+
+class CommandIn(_StrictIn):
+    command: CommandName
+    # Only for SET_INTERVAL. A whole number of seconds; strict, so "10" or 10.5 are rejected.
+    interval: int | None = Field(None, ge=MIN_INTERVAL, le=MAX_INTERVAL, strict=True)
+
+    @model_validator(mode="after")
+    def _params_match_command(self):
+        if self.command == "SET_INTERVAL" and self.interval is None:
+            raise ValueError("SET_INTERVAL needs interval (seconds)")
+        if self.command != "SET_INTERVAL" and self.interval is not None:
+            raise ValueError(f"{self.command} takes no interval")
+        return self
+
+    def params(self) -> dict:
+        return {"interval": self.interval} if self.command == "SET_INTERVAL" else {}
+
+
+class CommandOut(_UTCModel):
+    id: int
+    sensor_id: str
+    command: str
+    params: dict
+    status: str  # SENT / SUCCEEDED / FAILED / TIMED_OUT
+    message: str | None
+    requested_by: str
+    created_at: datetime
+    completed_at: datetime | None
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _parse_params(cls, value):
+        return json.loads(value) if isinstance(value, str) else (value or {})

@@ -26,7 +26,9 @@ def receiver_process(broker_available, mysql_available, clean_test_rows, tmp_pat
         stdout=log_file,
         stderr=subprocess.STDOUT,
         # Check for silent sensors every second from the start; the 30 s timeout itself stays the default.
-        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "OFFLINE_CHECK_INTERVAL": "1", "OFFLINE_STARTUP_GRACE": "0"},
+        # Commands time out after 3 s instead of 30, so the timeout test is quick.
+        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "OFFLINE_CHECK_INTERVAL": "1", "OFFLINE_STARTUP_GRACE": "0",
+             "COMMAND_TIMEOUT": "3"},
     )
 
     def log() -> str:
@@ -51,8 +53,8 @@ def mqtt_publisher(broker_available):
     client.connect(MQTT_HOST, MQTT_PORT)
     client.loop_start()
 
-    def publish(sensor_id: str, payload, topic_sensor_id: str | None = None):
-        topic = f"iot/sensors/{topic_sensor_id or sensor_id}/telemetry"
+    def publish(sensor_id: str, payload, topic_sensor_id: str | None = None, kind: str = "telemetry"):
+        topic = f"iot/sensors/{topic_sensor_id or sensor_id}/{kind}"
         body = payload if isinstance(payload, bytes) else json.dumps(payload)
         client.publish(topic, body, qos=1).wait_for_publish(timeout=5)
 

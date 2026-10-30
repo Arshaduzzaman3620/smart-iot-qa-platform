@@ -82,6 +82,7 @@ services:
       OFFLINE_TIMEOUT: ${OFFLINE_TIMEOUT:-30}
       OFFLINE_CHECK_INTERVAL: ${OFFLINE_CHECK_INTERVAL:-5}
       RECEIVER_BATCH_MAX: ${RECEIVER_BATCH_MAX:-200}
+      COMMAND_TIMEOUT: ${COMMAND_TIMEOUT:-30}
     depends_on:
       mqtt:
         condition: service_started

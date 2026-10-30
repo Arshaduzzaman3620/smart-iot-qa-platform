@@ -10,7 +10,7 @@
 
 Example: `iot/sensors/SENSOR-001/telemetry`
 
-The receiver subscribes with a wildcard to catch every sensor: `iot/sensors/+/telemetry`.
+The receiver subscribes with wildcards to catch every sensor: `iot/sensors/+/telemetry`, and since Phase 15d `iot/sensors/+/response` and `iot/sensors/+/status`. Each sensor subscribes to its own `iot/sensors/{id}/command`. Command, response and status payloads, and why status is retained: [commands.md](../architecture/commands.md). `firmware` is used by FOTA.
 
 ## Telemetry message
 

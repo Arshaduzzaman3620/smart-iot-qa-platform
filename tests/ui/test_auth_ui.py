@@ -4,20 +4,7 @@ import json
 
 from playwright.sync_api import expect
 
-from fake_api import alert, fake_session, sensor
-
-
-def telemetry_rows(sensor_id, count):
-    return [{"id": 100 - i, "sensor_id": sensor_id, "timestamp": f"2026-10-24T12:00:{59 - i:02d}Z",
-             "temperature": 20 + i / 10, "humidity": 40.0, "pressure": 1000.0, "light": 300.0, "battery": 80.0,
-             "received_at": f"2026-10-24T12:00:{59 - i:02d}Z"} for i in range(count)]
-
-
-def mock_details(page, sensor_id, readings=3, alerts=()):
-    page.route(f"**/api/sensors/{sensor_id}/telemetry*", lambda route: route.fulfill(
-        status=200, content_type="application/json", body=json.dumps(telemetry_rows(sensor_id, readings))))
-    page.route(f"**/api/sensors/{sensor_id}/alerts*", lambda route: route.fulfill(
-        status=200, content_type="application/json", body=json.dumps(list(alerts))))
+from fake_api import alert, fake_session, mock_details, sensor
 
 
 # ---- sign in -------------------------------------------------------------------------------

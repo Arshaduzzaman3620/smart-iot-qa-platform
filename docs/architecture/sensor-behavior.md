@@ -46,6 +46,10 @@ A sensor becomes `ONLINE` when the receiver stores a reading from it, and `OFFLI
 - starts from different, valid readings (only when `SENSOR_COUNT > 1`; a single sensor keeps the original defaults);
 - publishes on a fixed schedule, with first publishes spread evenly across one interval so the fleet doesn't send in bursts.
 
+`SENSOR_ID_PREFIX` (default `SENSOR-`) changes the ID prefix. Tests run the real simulator as `TEST-SIMxxxxxx-001` so they never collide with real sensors.
+
+Each sensor also announces its metadata on `iot/sensors/{id}/status` (retained) when it connects, and carries out `REQUEST_TELEMETRY`, `SET_INTERVAL` and `RESTART` commands from `iot/sensors/{id}/command`. Commands are queued from the MQTT threads and run on the main loop, which owns all sensor state. See [commands.md](commands.md).
+
 Stopping (Ctrl+C, SIGTERM, Ctrl+Break on Windows) finishes the current reading, disconnects every sensor cleanly, and logs `Simulator stopped`.
 
 ## Data generation logic
