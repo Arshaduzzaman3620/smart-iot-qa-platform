@@ -34,6 +34,8 @@ services:
       - "${MQTT_PORT:-1883}:1883"
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Sessions and queued messages survive a broker restart (docs/testing/reliability.md).
+      - mqtt-data:/mosquitto/data
     restart: unless-stopped
 
   mysql:
@@ -130,6 +132,10 @@ services:
       API_BASE_URL: http://api:8000
       # Inject a FOTA failure on every update: none / download / corrupt / install (docs/architecture/fota.md)
       FOTA_FAILURE: ${FOTA_FAILURE:-none}
+      # Fault injection, probability per reading 0-1 (docs/testing/reliability.md)
+      FAULT_INVALID_RATE: ${FAULT_INVALID_RATE:-0}
+      FAULT_MALFORMED_RATE: ${FAULT_MALFORMED_RATE:-0}
+      FAULT_DUPLICATE_RATE: ${FAULT_DUPLICATE_RATE:-0}
     depends_on:
       - mqtt
       - receiver
@@ -147,3 +153,4 @@ services:
 
 volumes:
   mysql-data:
+  mqtt-data:

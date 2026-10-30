@@ -15,6 +15,7 @@ tests/
   integration/   broker -> receiver process -> MySQL                      broker + MySQL
   ui/            dashboard in Chrome, API mocked with page.route          Node (Vite)
   e2e/           MQTT message -> receiver -> MySQL -> API -> dashboard    everything
+  reliability/   outages and crashes, cut with tests/tcp_proxy.py         broker + MySQL
 ```
 
 ## Running
@@ -66,6 +67,7 @@ Tests never touch real sensors. Each test gets a unique `TEST-XXXXXXXX` sensor I
 | mqtt | 5 | Round trip, `+` wildcard, non-matching topics, ordering at QoS 1, binary/empty payloads passed through unchanged. |
 | integration | 32 | Exact values stored, `+09:00` timestamp → UTC, auto-registration, upsert (one sensor row, N telemetry rows). Seven kinds of invalid message rejected with the right reason and nothing stored. Topic/`sensor_id` mismatch rejected. Receiver survives bad input. Boundary values stored exactly. Fractional seconds truncated, not rounded by MySQL. Latest-reading pointer follows the newest timestamp and ignores late messages. 20 concurrent sensors × 5 readings stored exactly once. Alerts: raise, no duplicates, escalate, resolve and re-raise, late reading ignored, silent sensor marked OFFLINE once, recovery back to ONLINE. Batches: results in order, alerts inside one batch identical to one-by-one, all-or-nothing, a rejected message isolated, a 300-message burst through the receiver stored once in per-sensor order. |
 | ui | 17 | Formatting (1 dp, units, relative time with a frozen clock), headers, low-battery threshold (19.99 red, 20.0 not), status badges, sensor with no readings, empty state, both error banners, keeps last data and recovers, a response slower than the refresh interval still shows (fake clock), renders 100 sensors, no horizontal scroll at 375 px. Alerts panel: empty state, severity badges, appears and clears on refresh, CRITICAL listed first, API failure banner. |
+| reliability | 4 | MySQL outage, broker outage for sensors, receiver SIGKILL, faulty sensors: 0 lost, 0 stored twice, recovery measured ([reliability.md](reliability.md)). |
 | e2e | 3 | Published reading appears on the dashboard with matching values. The dashboard updates without reload. A rejected reading never reaches the API or the dashboard. |
 
 **Total: 241 tests.** Verified that the suite catches regressions: widening the validator's temperature max from 85 to 86 failed 3 tests across 3 layers (unit, generator/validator consistency, integration).

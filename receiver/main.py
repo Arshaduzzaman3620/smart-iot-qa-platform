@@ -25,11 +25,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("receiver")
 alert_logger = logging.getLogger("receiver.alerts")
 
-TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
+TELEMETRY_TOPIC = f"{settings.TOPIC_ROOT}/+/telemetry"
 # Phase 15d: sensors answer commands on .../response and describe themselves on .../status.
-RESPONSE_TOPIC = "iot/sensors/+/response"
-STATUS_TOPIC = "iot/sensors/+/status"
-FIRMWARE_STATUS_TOPIC = "iot/sensors/+/firmware_status"  # Phase 15e: firmware update progress
+RESPONSE_TOPIC = f"{settings.TOPIC_ROOT}/+/response"
+STATUS_TOPIC = f"{settings.TOPIC_ROOT}/+/status"
+FIRMWARE_STATUS_TOPIC = f"{settings.TOPIC_ROOT}/+/firmware_status"  # Phase 15e: firmware update progress
 TOPICS = [TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC, FIRMWARE_STATUS_TOPIC]
 
 # Set by Ctrl+C / SIGTERM (e.g. `docker stop`) / Ctrl+Break on Windows. Stopping disconnects from
@@ -49,6 +49,10 @@ def install_stop_handlers():
 
 
 def log_saved(data: dict, result):
+    if result.duplicate:
+        logger.warning("Duplicate telemetry from %s ignored (same as id=%s): %s", data["sensor_id"],
+                       result.telemetry_id, data)
+        return
     logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
     for change in result.alert_changes:
         if change.action == "RESOLVE":
@@ -65,6 +69,7 @@ def log_failed(data: dict, exc: Exception):
 
 
 writer = BatchWriter(TelemetryRepository(), log_saved, log_failed, max_batch=settings.RECEIVER_BATCH_MAX)
+mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id=settings.RECEIVER_CLIENT_ID)
 commands = CommandRepository()
 firmware = FirmwareRepository()
 
@@ -75,22 +80,34 @@ def topic_sensor_id(topic: str) -> str:
 
 
 def on_message(client, userdata, msg):
+    """Every message is acknowledged exactly once: telemetry by the writer once stored (or rejected
+    by the database), everything else here once handled. Until then the broker keeps it."""
+    if handle_message(msg):
+        return  # the writer acknowledges it
+    mqtt_client.ack(msg.mid, msg.qos)
+
+
+def handle_message(msg) -> bool:
+    """True if the message was handed to the writer (which acknowledges it later)."""
     if not msg.payload and msg.topic.endswith("/status"):
-        return  # an empty retained message is how a sensor's status is cleared from the broker
+        return False  # an empty retained message is how a sensor's status is cleared from the broker
     # Receiver never trusts incoming data: parse, validate, and only then store.
     try:
         data = MessageParser.parse(msg.payload)
     except ParseError as exc:
         logger.warning("Rejected message on %s: %s (raw=%r)", msg.topic, exc, msg.payload[:200])
-        return
+        return False
 
     kind = msg.topic.rsplit("/", 1)[-1]
     if kind == "response":
-        return on_response(msg.topic, data)
+        on_response(msg.topic, data)
+        return False
     if kind == "status":
-        return on_status(msg.topic, data)
+        on_status(msg.topic, data)
+        return False
     if kind == "firmware_status":
-        return on_firmware_status(msg.topic, data)
+        on_firmware_status(msg.topic, data)
+        return False
 
     errors = TelemetryValidator.validate(data)
     if not errors and data["sensor_id"] != topic_sensor_id(msg.topic):
@@ -98,10 +115,11 @@ def on_message(client, userdata, msg):
         errors.append(f"sensor_id {data['sensor_id']!r} does not match topic {msg.topic!r}")
     if errors:
         logger.warning("Rejected message on %s: %s", msg.topic, "; ".join(errors))
-        return
+        return False
 
     # Stored (and logged) by the writer thread, batched with whatever else is waiting.
-    writer.submit(data)
+    writer.submit(data, on_done=lambda: mqtt_client.ack(msg.mid, msg.qos))
+    return True
 
 
 def on_response(topic: str, data: dict):
@@ -176,6 +194,12 @@ def expire_commands():
 
 
 def check_offline(detector: OfflineDetector):
+    # During a database outage nothing is stored, so every sensor's last_seen goes stale; and until
+    # the held backlog is stored (plus one grace period) the readings proving sensors alive aren't in yet.
+    if writer.in_outage or writer.backlog > settings.RECEIVER_BATCH_MAX or (
+            writer.outage_ended_at is not None
+            and time.monotonic() - writer.outage_ended_at < settings.OFFLINE_STARTUP_GRACE):
+        return
     try:
         offline = detector.sweep()
     except SQLAlchemyError as exc:
@@ -188,7 +212,6 @@ def check_offline(detector: OfflineDetector):
 def main():
     install_stop_handlers()
     writer.start()
-    mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id="receiver")
     mqtt_client.set_message_handler(on_message)
     mqtt_client.connect(TOPICS)
     logger.info("Receiver starting, subscribing to %s", ", ".join(TOPICS))

@@ -56,3 +56,8 @@ def login_headers(api_url: str, username: str, password: str) -> dict:
     response = httpx.post(f"{api_url}/auth/login", json={"username": username, "password": password}, timeout=10)
     response.raise_for_status()
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def report(name: str, **metrics):
+    """One line of measurements per scenario, shown with `pytest -s` (used by the reliability tests)."""
+    print(f"\n[{name}] " + ", ".join(f"{k}={v}" for k, v in metrics.items()))

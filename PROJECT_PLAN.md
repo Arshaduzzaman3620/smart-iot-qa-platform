@@ -24,8 +24,8 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15c** — Authentication and roles
   - [x] **15d** — Sensor commands
   - [x] **15e** — FOTA (firmware over the air)
-  - [ ] **15f** — Reliability and failure injection *(next)*
-  - [ ] **15g** — Security and performance
+  - [x] **15f** — Reliability and failure injection
+  - [ ] **15g** — Security and performance *(next)*
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -51,7 +51,15 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15e complete: firmware over the air.** Details: [docs/architecture/fota.md](docs/architecture/fota.md).
+**Phase 15f complete: reliability and failure injection.** Details: [docs/testing/reliability.md](docs/testing/reliability.md).
+- The pipeline is now **at-least-once with deduplication**. MySQL down: the receiver holds and retries (was: dropped). Broker unreachable: sensors buffer up to 1000 readings and resend in order (was: dropped). Receiver down or crashed: persistent MQTT session + QoS 1, so the broker queues for it. Broker restart: Mosquitto persistence. Redeliveries and resends: identical readings stored once. Offline detection pauses during an outage and its backlog. This closes the Phase 12 "no buffering" limitation.
+- Fault injection: `FAULT_INVALID_RATE` / `FAULT_MALFORMED_RATE` / `FAULT_DUPLICATE_RATE` in the simulator, and an in-test TCP proxy that cuts MySQL or the broker without Docker access, so it works the same in CI.
+- New `tests/reliability` layer: MySQL outage (50 held, stored 5.3 s after recovery), broker outage (75 buffered, stored 5.4 s after), receiver SIGKILL (50 queued, stored 0.3 s after restart), faulty sensors. **0 lost and 0 duplicates in every scenario.** Verified on the real stack too: `docker compose stop mysql` 20 s → 48 sent, 48 stored; `docker compose restart mqtt` → 0 duplicates.
+- Defects found and fixed: (1) paho acknowledged QoS 1 messages when queued, not when stored, so a receiver crash lost them; now manual acks after storing. (2) The first broker-outage test passed while every buffered reading was lost, because it only compared against "sent". Fixed the test, capped reconnect backoff at 10 s, and the simulator flushes and reports on shutdown. (3) The simulator's `publish()` reported success without a PUBACK.
+- Measurement caveat found: a suspended Mac freezes the simulated sensors too (one run looked like loss until the log showed a 90 s system sleep).
+- Tests: 620 (21 new). All pass.
+
+**Phase 15e (previous): firmware over the air.** Details: [docs/architecture/fota.md](docs/architecture/fota.md).
 - ADMIN uploads an image (raw bytes, at most 1 MiB, SHA-256 computed). OPERATOR starts an update. The sensor gets the version, size, checksum and a **10-minute download token scoped to that one image**, downloads over HTTP, verifies size and SHA-256, installs and reboots, reporting DOWNLOADING → VERIFYING → INSTALLING → SUCCEEDED / FAILED. The receiver applies progress forward-only and only for the sensor's own update, sets the new version on success, and times out stalled updates (`FOTA_TIMEOUT`).
 - Failure scenarios: low battery, download failure, corrupt image, install failure with rollback, same version, concurrent update, no answer, broker down. `download` / `corrupt` / `install` can be injected with `FOTA_FAILURE`. In every failure the sensor keeps its old firmware.
 - Verified by hand: upload validation (409 duplicate, 413 > 1 MiB, 422 empty or bad version), a full update 1.0.0 → 1.1.0, each injected failure (sensor stays on 1.0.0), then a normal update succeeding, and 5 token attacks (tampered, login-as-download, wrong image, download-as-login, none) all refused.

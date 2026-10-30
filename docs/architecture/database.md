@@ -77,7 +77,7 @@ Separately, the receiver's offline check sets silent `ONLINE` sensors to `OFFLIN
 
 One commit per batch instead of per message is what lifted the receiver's ceiling from ~33 to ~95 msg/s (Phase 15b). The result is identical to saving the messages one by one, alerts included. If a batch fails, the writer retries its messages individually, so only a message MySQL rejects is lost.
 
-All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fractions itself, because MySQL would round them, which can put a time up to 0.5 s in the future. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
+All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fractions itself, because MySQL would round them, which can put a time up to 0.5 s in the future. If MySQL is unavailable, the writer holds the batch and retries until it is back, and nothing is dropped (Phase 15f, [reliability.md](../testing/reliability.md)). A reading identical to one already stored is skipped as a duplicate.
 
 ## Running it locally
 

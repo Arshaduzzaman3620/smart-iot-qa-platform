@@ -1,10 +1,12 @@
 import json
 import logging
 import queue
+import random
 import signal
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 if sys.version_info < (3, 10):  # `X | None` annotations below fail on import otherwise
@@ -13,6 +15,7 @@ if sys.version_info < (3, 10):  # `X | None` annotations below fail on import ot
 
 from commands.command_handler import CommandError, parse_command, response
 from config import settings
+from faults.fault_injector import FaultRates, apply_faults
 from fota.fota_client import FotaError, parse_update, run_update
 from generator.data_generator import DataGenerator
 from mqtt.mqtt_client import MQTTClient
@@ -52,7 +55,13 @@ def install_stop_handlers():
 
 
 def topic(sensor_id: str, kind: str) -> str:
-    return f"iot/sensors/{sensor_id}/{kind}"
+    return f"{settings.TOPIC_ROOT}/{sensor_id}/{kind}"
+
+
+# Readings taken while the broker was unreachable, per sensor, oldest first (Phase 15f).
+buffers: dict[str, deque] = {}
+fault_rates = FaultRates()  # set from settings in main()
+fault_rng = random.Random()
 
 
 def build_telemetry(sensor: EnvironmentSensor) -> dict:
@@ -90,13 +99,49 @@ def connect_all(clients: list[MQTTClient]):
                        connected, len(clients))
 
 
+def flush_buffer(sensor_id: str, client: MQTTClient):
+    """Send readings kept during a broker outage, oldest first, while the connection holds."""
+    buffer = buffers.get(sensor_id)
+    while buffer and client.is_connected():
+        payload = buffer[0]
+        if not client.publish(topic(sensor_id, "telemetry"), json.dumps(payload), qos=1):
+            return
+        buffer.popleft()
+        logger.info("Telemetry sent: %s (was buffered, %d left)", payload, len(buffer))
+
+
+def keep_for_later(sensor_id: str, payload: dict):
+    buffer = buffers.setdefault(sensor_id, deque(maxlen=settings.SENSOR_BUFFER_MAX))
+    if settings.SENSOR_BUFFER_MAX <= 0:
+        logger.warning("Telemetry dropped (not published): %s", payload)
+        return
+    if len(buffer) == buffer.maxlen:
+        logger.warning("Telemetry dropped (buffer full, oldest discarded): %s", buffer[0])
+    buffer.append(payload)
+    logger.warning("Telemetry buffered (broker unreachable, %d waiting): %s", len(buffer), payload)
+
+
 def publish_reading(sensor: EnvironmentSensor, client: MQTTClient, generator: DataGenerator) -> bool:
+    """Take a reading and publish it at QoS 1; if the broker is unreachable, keep it for later.
+    Returns True if it was published now."""
     next_reading(sensor, generator)
     payload = build_telemetry(sensor)
-    if client.publish(topic(sensor.sensor_id, "telemetry"), json.dumps(payload)):
-        logger.info("Telemetry sent: %s", payload)
+    flush_buffer(sensor.sensor_id, client)  # older readings go first, so order is kept
+    if buffers.get(sensor.sensor_id):
+        keep_for_later(sensor.sensor_id, payload)
+        return False
+
+    payloads, faults = apply_faults(payload, fault_rates, fault_rng)
+    if faults:
+        logger.warning("Fault injected (%s) into %s: %r", ", ".join(faults), sensor.sensor_id, payloads[0][:200])
+    sent = [client.publish(topic(sensor.sensor_id, "telemetry"), p, qos=1) for p in payloads]
+    valid = set(faults) <= {"duplicate"}  # a duplicated reading is still a good reading, to be stored once
+    if sent[0]:
+        if valid:
+            logger.info("Telemetry sent: %s", payload)
         return True
-    logger.warning("Telemetry dropped (not published): %s", payload)
+    if valid:  # a deliberately broken message is not worth keeping
+        keep_for_later(sensor.sensor_id, payload)
     return False
 
 
@@ -224,6 +269,16 @@ def main():
         logger.error("Invalid SENSOR_COUNT: %s", exc)
         sys.exit(1)
 
+    global fault_rates
+    try:
+        fault_rates = FaultRates(settings.FAULT_INVALID_RATE, settings.FAULT_MALFORMED_RATE,
+                                 settings.FAULT_DUPLICATE_RATE)
+    except ValueError as exc:
+        logger.error("Invalid fault injection setting: %s", exc)
+        sys.exit(1)
+    if fault_rates.any:
+        logger.warning("Fault injection on: %s", fault_rates)
+
     generator = DataGenerator()
     sensors = {s.sensor_id: s for s in fleet}
     clients = {s.sensor_id: MQTTClient(settings.MQTT_HOST, settings.MQTT_PORT, client_id=s.sensor_id) for s in fleet}
@@ -256,6 +311,9 @@ def main():
             while not main_thread_work.empty() and not stop_requested.is_set():
                 main_thread_work.get_nowait()()
             restart_check = runner.advance_restarts()
+            for sensor_id, buffer in buffers.items():
+                if buffer and sensor_id not in runner.restarting:
+                    flush_buffer(sensor_id, clients[sensor_id])
 
             for sensor in fleet:
                 if stop_requested.is_set():
@@ -273,6 +331,11 @@ def main():
             wakeup.wait(timeout)
             wakeup.clear()
     finally:
+        # Last chance for readings kept during an outage; whatever is still unsent is lost, so say so.
+        for sensor_id, buffer in buffers.items():
+            flush_buffer(sensor_id, clients[sensor_id])
+            if buffer:
+                logger.error("%s: %d buffered readings not sent (broker unreachable at shutdown)", sensor_id, len(buffer))
         for sensor in fleet:
             sensor.mark_offline()
         for client in clients.values():
