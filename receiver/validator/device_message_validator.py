@@ -35,3 +35,21 @@ def validate_status(data: dict) -> list[str]:
         elif len(value) > max_length:
             errors.append(f"{field} longer than {max_length} characters")
     return errors
+
+
+# Firmware progress a sensor may report (Phase 15e). REQUESTED and TIMED_OUT are set by the API and
+# the receiver, never by a device.
+FIRMWARE_STATUSES = ("DOWNLOADING", "VERIFYING", "INSTALLING", "SUCCEEDED", "FAILED")
+
+
+def validate_firmware_status(data: dict) -> list[str]:
+    """iot/sensors/{id}/firmware_status: {"update_id": 3, "status": "VERIFYING", "message": "..."}."""
+    errors = []
+    if not _is_int(data.get("update_id")) or data["update_id"] < 1:
+        errors.append("update_id must be a positive integer")
+    if data.get("status") not in FIRMWARE_STATUSES:
+        errors.append(f"status must be one of {', '.join(FIRMWARE_STATUSES)}")
+    message = data.get("message")
+    if message is not None and not isinstance(message, str):
+        errors.append("message must be a string")
+    return errors

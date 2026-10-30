@@ -167,3 +167,46 @@ class CommandOut(_UTCModel):
     @classmethod
     def _parse_params(cls, value):
         return json.loads(value) if isinstance(value, str) else (value or {})
+
+
+# ---- firmware over the air (Phase 15e) ------------------------------------------------------
+
+VERSION_PATTERN = r"^\d{1,4}\.\d{1,4}\.\d{1,4}$"  # 1.2.3; fits firmware.version VARCHAR(20)
+
+
+class FirmwareOut(_UTCModel):
+    id: int
+    version: str
+    filename: str
+    checksum: str
+    size: int
+    uploaded_by: str
+    created_at: datetime
+
+
+class FirmwareUpdateIn(_StrictIn):
+    firmware_id: int = Field(ge=1, strict=True)
+
+
+class FirmwareUpdateOut(_UTCModel):
+    id: int
+    sensor_id: str
+    firmware_id: int
+    version: str
+    from_version: str | None
+    # REQUESTED / DOWNLOADING / VERIFYING / INSTALLING / SUCCEEDED / FAILED / TIMED_OUT
+    status: str
+    error_message: str | None
+    requested_by: str
+    started_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _version_from_firmware(cls, value):
+        # From the ORM row: the target version lives on the related firmware.
+        if hasattr(value, "firmware") and not isinstance(value, dict):
+            return {**{c: getattr(value, c) for c in cls.model_fields if c != "version"},
+                    "version": value.firmware.version}
+        return value

@@ -37,6 +37,9 @@ def get_current_user(
         raise _unauthorized("Token expired")
     except jwt.InvalidTokenError:
         raise _unauthorized("Invalid token")
+    if "scope" in claims:
+        # A firmware download token is not a login: it must never open the rest of the API.
+        raise _unauthorized("Invalid token")
     # The user is looked up on every request, so deleting a user or changing their role takes
     # effect at once instead of when their token expires.
     user = db.scalar(select(User).where(User.username == claims["sub"]))

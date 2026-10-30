@@ -23,8 +23,9 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
   - [x] **15c** — Authentication and roles
   - [x] **15d** — Sensor commands
-  - [ ] **15e** — FOTA (firmware over the air) *(next)*
-  - [ ] later parts — failure injection and reliability, security and performance
+  - [x] **15e** — FOTA (firmware over the air)
+  - [ ] **15f** — Reliability and failure injection *(next)*
+  - [ ] **15g** — Security and performance
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -50,7 +51,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15d complete: sensor commands.** Details: [docs/architecture/commands.md](docs/architecture/commands.md).
+**Phase 15e complete: firmware over the air.** Details: [docs/architecture/fota.md](docs/architecture/fota.md).
+- ADMIN uploads an image (raw bytes, at most 1 MiB, SHA-256 computed). OPERATOR starts an update. The sensor gets the version, size, checksum and a **10-minute download token scoped to that one image**, downloads over HTTP, verifies size and SHA-256, installs and reboots, reporting DOWNLOADING → VERIFYING → INSTALLING → SUCCEEDED / FAILED. The receiver applies progress forward-only and only for the sensor's own update, sets the new version on success, and times out stalled updates (`FOTA_TIMEOUT`).
+- Failure scenarios: low battery, download failure, corrupt image, install failure with rollback, same version, concurrent update, no answer, broker down. `download` / `corrupt` / `install` can be injected with `FOTA_FAILURE`. In every failure the sensor keeps its old firmware.
+- Verified by hand: upload validation (409 duplicate, 413 > 1 MiB, 422 empty or bad version), a full update 1.0.0 → 1.1.0, each injected failure (sensor stays on 1.0.0), then a normal update succeeding, and 5 token attacks (tampered, login-as-download, wrong image, download-as-login, none) all refused.
+- Dashboard: firmware library (upload for ADMIN) and a per-sensor firmware panel with live progress.
+- Removed the empty Phase 0 `fota/` placeholder folder. FOTA lives in the services, and the folder name shadowed the simulator's `fota` package.
+- Defect fixed in a test: the slow-API UI test waited a fixed 300 ms for React's second dev mount, which the extra startup requests made too short. It now waits for the request itself.
+- Tests: 599 (109 new), incl. E2E with the real simulator for success, three injected failures, low battery, and an update from the dashboard. All pass.
+
+**Phase 15d (previous): sensor commands.** Details: [docs/architecture/commands.md](docs/architecture/commands.md).
 - `REQUEST_TELEMETRY`, `SET_INTERVAL` (1–3600 s) and `RESTART` travel dashboard → API → MQTT → sensor, and the sensor's answer travels back → receiver → MySQL → dashboard. A command is `SENT`, then `SUCCEEDED` / `FAILED` from the sensor, or `TIMED_OUT` after `COMMAND_TIMEOUT` (30 s). A broker outage is `503` and is recorded as `FAILED`.
 - Checked at every hop: the API (strict types and ranges, OPERATOR+), the sensor (answers `FAILED` with the reason), and the receiver (a response only completes a still-`SENT` command *of the sensor it came from*; duplicates, late answers and other sensors' ids are ignored).
 - Sensors announce name, location, type and firmware on `.../status` when they connect. This closes the Phase 12 "metadata not propagated" limitation. Operator-set names are never overwritten.

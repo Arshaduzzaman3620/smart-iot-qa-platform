@@ -31,7 +31,15 @@ def mock_alerts_api(page):
 
 
 @pytest.fixture
-def mock_sensors_api(page, mock_alerts_api):
+def mock_firmware_api(page):
+    """Replace GET /api/firmware (the firmware library). Defaults to none uploaded."""
+    mock = _mocker(page, "**/api/firmware")
+    mock([])
+    return mock
+
+
+@pytest.fixture
+def mock_sensors_api(page, mock_alerts_api, mock_firmware_api):
     """Replace GET /api/sensors with a canned response."""
     return _mocker(page, "**/api/sensors")
 

@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 from database.session import SessionLocal
 
 from . import mqtt_publisher
-from .api import alerts, auth, commands, health, sensors, users
+from .api import alerts, auth, commands, firmware, health, sensors, users
 from .bootstrap import ensure_admin
 from .security import JWT_SECRET, JWT_SECRET_CONFIGURED
 
@@ -42,6 +42,8 @@ app.include_router(users.router)
 app.include_router(sensors.router)
 app.include_router(alerts.router)
 app.include_router(commands.router)
+app.include_router(firmware.viewer)
+app.include_router(firmware.download)
 
 
 @app.exception_handler(OperationalError)

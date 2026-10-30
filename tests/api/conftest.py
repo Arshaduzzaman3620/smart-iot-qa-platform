@@ -1,8 +1,10 @@
+import json
 from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.api.commands import get_publisher
 from backend.app.main import app
 from backend.app.security import create_token
 from database.models import Sensor, Telemetry
@@ -57,3 +59,23 @@ def seeded_sensor(sensor_id):
 
     with SessionLocal() as session, session.begin():
         session.query(Sensor).filter_by(sensor_id=sensor_id).delete()
+
+
+class FakePublisher:
+    """Stands in for the API's MQTT connection: records what would be published; `up=False` = broker down."""
+
+    def __init__(self):
+        self.sent, self.up = [], True
+
+    def publish(self, topic, payload):
+        if self.up:
+            self.sent.append((topic, json.loads(payload)))
+        return self.up
+
+
+@pytest.fixture
+def broker():
+    fake = FakePublisher()
+    app.dependency_overrides[get_publisher] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_publisher, None)
