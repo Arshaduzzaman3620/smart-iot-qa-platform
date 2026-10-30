@@ -26,7 +26,7 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15e** — FOTA (firmware over the air)
   - [x] **15f** — Reliability and failure injection
   - [x] **15g** — Security and performance
-- [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression *(next)*
+- [x] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
 
@@ -51,7 +51,14 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15g complete: security and performance. Phase 15 is done.** Details: [docs/security/security.md](docs/security/security.md), [docs/testing/performance.md](docs/testing/performance.md).
+**Phase 16 complete: the project is finished.** Results: [docs/testing/final-report.md](docs/testing/final-report.md).
+- **AI QA assistant** ([qa-assistant/](qa-assistant/), [doc](docs/testing/ai-qa-assistant.md)): `generate-tests` turns a requirement into positive, negative and boundary test cases per layer, marking what is already covered. `analyze-failures` classifies each failure of a pytest run, with evidence and a next step. Claude Opus 5.5 via the Anthropic SDK, with structured outputs (Pydantic), the project docs as the cached specification, refusal fallback, and every non-answer turned into a clear error. 17 tests with a fake client (no API calls, no key needed in CI). Not yet run against the live API (no key on the build machine).
+- **Final QA report:** test inventory (703 tests, 7 layers), requirements traceability (11 of 11 covered), the defect log (31 found and fixed), known limits, and how to reproduce.
+- **Docs polish:** the README is the project's front page (results, quick start, features, architecture, stack), test counts are updated, and every doc link was checked.
+- **CI** (since the portable environment): test suite, full-stack start and dependency audit on every push.
+- **Final regression (2026-10-30):** the full suite twice in a row, **703 / 703 passed both times** (3 min 22 s and 3 min 27 s, no flaky tests). A fresh install from empty volumes in an isolated Compose project: all services healthy, first admin created, sign-in through the dashboard, 5 / 5 sensors reporting with firmware and names, 0 error lines. A mutation check (temperature limit widened 85 → 86 in the test container only) was caught by 3 tests in 3 places. CI workflow YAML valid (jobs: tests, stack, audit). Load, stress, spike and soak and the 100-sensor ingestion check: see 15g. One `docker compose up` of the fresh project failed instantly on the first try with its output discarded; the identical command then succeeded, and it did not recur.
+
+**Phase 15g (previous): security and performance. Phase 15 is done.** Details: [docs/security/security.md](docs/security/security.md), [docs/testing/performance.md](docs/testing/performance.md).
 - **MQTT security:** no anonymous access. Four accounts (`sensor`, `receiver`, `api`, `qa` for tests), passwords from the environment, written to the broker's password file at start. ACLs limit each account to its own topics. Verified on the live broker: anonymous and wrong-password clients are refused, and a `sensor` account's forged RESTART command never arrives.
 - **API security:** login rate limiting (5 failures per username, 20 per client, per 5 min → 429 + Retry-After). Security headers on every response (strict CSP, nosniff, DENY framing, no-referrer, no-store), and a strict CSP on the dashboard: the real build runs with **no CSP violations** in a browser. No CORS. Hostile-input tests (SQL injection, traversal, oversized and malformed bodies). `pip-audit` and `npm audit` in CI.
 - **Performance (k6, in Docker):** load (50 VUs) 144 req/s, p95 38 ms, 0 % errors. Soak 0 % errors, flat memory. Stress and spike up to 300 VUs: **0 % errors, 303 req/s, max 0.7 s.** Ingestion at 100 sensors: 100 msg/s stored with 0 missing, 0 duplicates, max latency 1 s.
