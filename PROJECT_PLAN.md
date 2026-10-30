@@ -22,8 +22,9 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15b** — Receiver throughput: batched writes
   - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
   - [x] **15c** — Authentication and roles
-  - [ ] **15d** — Sensor commands *(next)*
-  - [ ] later parts — FOTA, failure injection and reliability, security and performance
+  - [x] **15d** — Sensor commands
+  - [ ] **15e** — FOTA (firmware over the air) *(next)*
+  - [ ] later parts — failure injection and reliability, security and performance
 - [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
@@ -49,7 +50,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15c complete: authentication and roles.** Details: [docs/api/auth.md](docs/api/auth.md).
+**Phase 15d complete: sensor commands.** Details: [docs/architecture/commands.md](docs/architecture/commands.md).
+- `REQUEST_TELEMETRY`, `SET_INTERVAL` (1–3600 s) and `RESTART` travel dashboard → API → MQTT → sensor, and the sensor's answer travels back → receiver → MySQL → dashboard. A command is `SENT`, then `SUCCEEDED` / `FAILED` from the sensor, or `TIMED_OUT` after `COMMAND_TIMEOUT` (30 s). A broker outage is `503` and is recorded as `FAILED`.
+- Checked at every hop: the API (strict types and ranges, OPERATOR+), the sensor (answers `FAILED` with the reason), and the receiver (a response only completes a still-`SENT` command *of the sensor it came from*; duplicates, late answers and other sensors' ids are ignored).
+- Sensors announce name, location, type and firmware on `.../status` when they connect. This closes the Phase 12 "metadata not propagated" limitation. Operator-set names are never overwritten.
+- Defect found by manual check: the first status announcements were all lost, because sensors connect before the receiver subscribes. Status is now **retained**, so the broker delivers it whenever the receiver (re)subscribes. Verified: firmware `1.0.0` stored for all 5 sensors, operator names kept.
+- Verified by hand against the running stack: each command (SET_INTERVAL 2 → readings 2 s apart; RESTART → SENT for 3 s, then SUCCEEDED), 6 invalid requests → 422/404, a forged command answered FAILED by the sensor, and a sensor's attempt to answer another sensor's command ignored.
+- Build: pip got `PIP_DEFAULT_TIMEOUT` / `PIP_RETRIES`, after a slow network truncated a download ("hashes do not match").
+- Tests: 490 (112 new): parser/validator unit tests, API tests with a fake publisher (exact payload, validation, roles, broker down), integration tests through the real receiver (responses, ownership, duplicates, timeouts, status), E2E with the **real simulator** (metadata, all three commands, a dashboard click), and UI tests for the commands panel. All pass.
+
+**Phase 15c (previous): authentication and roles.** Details: [docs/api/auth.md](docs/api/auth.md).
 - `POST /auth/login` issues a JWT (HS256, 60 min). Every endpoint except `/health` needs one. Roles are VIEWER (read) < OPERATOR (also `PATCH /sensors/{id}` name/location) < ADMIN (also `/users`: list, create, delete). The role is read from the database on every request, so deleting a user or demoting them takes effect at once, and a token's own role claim is never trusted.
 - Passwords are salted scrypt from the standard library and are never stored, logged or echoed in a 422. An unknown username takes as long to reject as a wrong password, with the same message, so usernames can't be enumerated. Tokens with `alg: none`, a wrong signature, or no expiry are rejected.
 - The first admin is created on API startup when the users table is empty (`ADMIN_USERNAME` / `ADMIN_PASSWORD`, Compose dev default `admin` / `admin-dev-password`).

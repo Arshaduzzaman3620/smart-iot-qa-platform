@@ -18,3 +18,6 @@ OFFLINE_STARTUP_GRACE = float(os.getenv("OFFLINE_STARTUP_GRACE", str(OFFLINE_TIM
 
 # Most messages a single transaction stores when they queue up under load (one commit for all).
 RECEIVER_BATCH_MAX = int(os.getenv("RECEIVER_BATCH_MAX", "200"))
+
+# A command still unanswered after this many seconds becomes TIMED_OUT (checked with the offline check).
+COMMAND_TIMEOUT = float(os.getenv("COMMAND_TIMEOUT", "30"))

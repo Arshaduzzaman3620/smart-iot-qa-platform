@@ -1,4 +1,4 @@
-import type { Alert, Sensor, Session, Telemetry } from "./types";
+import type { Alert, Command, CommandName, Sensor, Session, Telemetry } from "./types";
 
 const API_BASE = "/api";
 
@@ -25,7 +25,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError("Cannot reach the API");
   }
   if (response.status === 401) throw new AuthError(await detail(response, "Session expired"));
-  if (response.status === 503) throw new ApiError("Database unavailable");
+  // 503 is "Database unavailable", or "MQTT broker unreachable" for a command.
+  if (response.status === 503) throw new ApiError(await detail(response, "Database unavailable"));
   // The dev proxy answers 500/502/504 itself when FastAPI is not running.
   if (response.status >= 500) throw new ApiError("Cannot reach the API");
   if (!response.ok) throw new ApiError(await detail(response, `API error ${response.status}`));
@@ -68,5 +69,16 @@ export function updateSensor(sensorId: string, changes: { name?: string; locatio
   return request<Sensor>(`/sensors/${encodeURIComponent(sensorId)}`, {
     method: "PATCH",
     body: JSON.stringify(changes),
+  });
+}
+
+export function fetchCommands(sensorId: string, limit: number, signal?: AbortSignal): Promise<Command[]> {
+  return request<Command[]>(`/sensors/${encodeURIComponent(sensorId)}/commands?limit=${limit}`, { signal });
+}
+
+export function sendCommand(sensorId: string, command: CommandName, interval?: number): Promise<Command> {
+  return request<Command>(`/sensors/${encodeURIComponent(sensorId)}/commands`, {
+    method: "POST",
+    body: JSON.stringify(command === "SET_INTERVAL" ? { command, interval } : { command }),
   });
 }

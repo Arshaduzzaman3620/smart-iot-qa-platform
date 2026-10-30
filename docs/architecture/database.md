@@ -14,6 +14,12 @@ Database: `smart_iot`
 
 `id, sensor_id, alert_type, severity, value, message, created_at, resolved_at, status`
 
+## commands
+
+`id, sensor_id, command, params, status, message, requested_by, created_at, completed_at`
+
+One row per command sent to a sensor (Phase 15d). `params` is JSON, and `status` is `SENT` → `SUCCEEDED` / `FAILED` / `TIMED_OUT`. Deleted with its sensor (cascade). Indexes: `(sensor_id, created_at)` for a sensor's history, and `(status, created_at)` for the timeout sweep. See [commands.md](commands.md).
+
 ## users
 
 `id, username, password_hash, role, created_at`
@@ -39,7 +45,7 @@ sensors
 
 ## Implementation status
 
-`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), and `users` since Phase 15c. `firmware` and `firmware_updates` arrive with FOTA.
+`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), `users` since Phase 15c, and `commands` since 15d. `firmware` and `firmware_updates` arrive with FOTA.
 
 Implementation notes:
 

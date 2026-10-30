@@ -56,3 +56,18 @@ export interface Session {
   expires_in: number;
   user: User;
 }
+
+export type CommandName = "RESTART" | "REQUEST_TELEMETRY" | "SET_INTERVAL";
+
+export interface Command {
+  id: number;
+  sensor_id: string;
+  command: CommandName;
+  params: { interval?: number };
+  // SENT until the sensor answers (SUCCEEDED / FAILED) or COMMAND_TIMEOUT passes (TIMED_OUT)
+  status: "SENT" | "SUCCEEDED" | "FAILED" | "TIMED_OUT";
+  message: string | null;
+  requested_by: string;
+  created_at: string;
+  completed_at: string | null;
+}

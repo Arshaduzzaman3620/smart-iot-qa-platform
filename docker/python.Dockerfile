@@ -4,11 +4,15 @@
 # --- app: the services -----------------------------------------------------------------------
 FROM python:3.12-slim-bookworm AS app
 
+# PIP_DEFAULT_TIMEOUT / PIP_RETRIES: on a slow or flaky network a truncated download otherwise
+# fails the build with "THESE PACKAGES DO NOT MATCH THE HASHES" (seen 2026-10-30).
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONIOENCODING=utf-8 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=60 \
+    PIP_RETRIES=5
 
 WORKDIR /app
 
