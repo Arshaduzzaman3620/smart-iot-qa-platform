@@ -1,5 +1,5 @@
-"""Accounts (Phase 19): sign-up with admin approval, email, forgot username / password, reset links,
-and the schema upgrade. Emails are captured instead of sent."""
+"""Accounts (Phase 19): accounts with email created by an admin (no public sign-up), forgot username /
+password, reset links, and the schema upgrade. Emails are captured instead of sent."""
 
 import re
 import uuid
@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import inspect, select, text, update
 
 from backend.app import mailer
-from backend.app.api.auth import BAD_RESET_DETAIL, FORGOT_DETAIL, PENDING_DETAIL
+from backend.app.api.auth import BAD_RESET_DETAIL, DISABLED_DETAIL, FORGOT_DETAIL
 from backend.app.security import create_token, hash_password
 from database.migrations import upgrade
 from database.models import PasswordReset, User
@@ -29,12 +29,6 @@ def outbox(monkeypatch):
 
 def new_name() -> str:
     return f"{TEST_USER_PREFIX}acct-{uuid.uuid4().hex[:8]}"
-
-
-def register(anon_client, username=None, email=None, password=PASSWORD):
-    username = username or new_name()
-    email = email or f"{username}@example.test"
-    return anon_client.post("/auth/register", json={"username": username, "email": email, "password": password}), username
 
 
 def db_user(username) -> User | None:
@@ -58,94 +52,72 @@ def reset_token(body: str) -> str:
     return re.search(r"\?reset=([A-Za-z0-9_-]+)", body).group(1)
 
 
-# ---- sign-up -----------------------------------------------------------------------------------------
+# ---- accounts are created by an admin -------------------------------------------------------------
 
-def test_sign_up_creates_a_pending_viewer(anon_client, outbox):
-    response, username = register(anon_client, email="  Mixed@Example.TEST ".replace("Mixed", uuid.uuid4().hex[:6]))
-    assert response.status_code == 201
-    assert "approve" in response.json()["detail"]
-    user = db_user(username)
-    assert (user.status, user.role) == ("PENDING", "VIEWER")
-    assert user.email == user.email.strip().lower()  # stored trimmed and lower-case
-    assert user.password_hash != PASSWORD
-
-
-def test_pending_account_cannot_sign_in_but_wrong_password_reveals_nothing(anon_client, outbox):
-    _, username = register(anon_client)
-    right = login(anon_client, username)
-    assert right.status_code == 403 and right.json()["detail"] == PENDING_DETAIL
-    wrong = login(anon_client, username, "not-the-password")
-    assert wrong.status_code == 401 and wrong.json()["detail"] == "Invalid username or password"
-
-
-def test_sign_up_cannot_choose_its_own_role(anon_client):
+def test_there_is_no_public_sign_up(anon_client):
     username = new_name()
     response = anon_client.post("/auth/register", json={"username": username, "email": f"{username}@example.test",
-                                                         "password": PASSWORD, "role": "ADMIN"})
-    assert response.status_code == 422
+                                                         "password": PASSWORD})
+    assert response.status_code in (404, 405)
     assert db_user(username) is None
 
 
-@pytest.mark.parametrize("field, value", [
-    ("email", "not-an-email"), ("email", "a@b"), ("email", ""), ("password", "short"),
-    ("username", "ab"), ("username", "has space"), ("username", "x" * 51),
-])
-def test_sign_up_validation(anon_client, field, value):
-    body = {"username": new_name(), "email": f"{uuid.uuid4().hex[:6]}@example.test", "password": PASSWORD, field: value}
-    assert anon_client.post("/auth/register", json=body).status_code == 422
+def test_admin_creates_a_user_with_an_email_and_they_are_welcomed(client, headers_for, outbox):
+    username = new_name()
+    response = client.post("/users", json={"username": username, "password": PASSWORD, "role": "OPERATOR",
+                                           "email": f"{username}@Example.test"}, headers=headers_for("ADMIN"))
+    assert response.status_code == 201
+    assert response.json()["email"] == f"{username}@example.test"  # stored trimmed and lower-case
+    (to, subject, body), = outbox
+    assert to == f"{username}@example.test" and subject == "Your SmartIoT account"
+    assert f"Username: {username}" in body and "https://localhost:8443/" in body
+    assert PASSWORD not in body  # the password is never emailed
 
 
-def test_duplicate_username_or_email_is_409(anon_client, outbox):
-    _, username = register(anon_client)
-    again, _ = register(anon_client, username=username, email=f"other-{uuid.uuid4().hex[:6]}@example.test")
-    assert again.status_code == 409
-    same_email, _ = register(anon_client, email=f"{username}@EXAMPLE.test")  # same address, other case
-    assert same_email.status_code == 409
+def test_a_user_without_an_email_gets_no_email(client, headers_for, outbox):
+    response = client.post("/users", json={"username": new_name(), "password": PASSWORD}, headers=headers_for("ADMIN"))
+    assert response.status_code == 201 and response.json()["email"] is None
+    assert outbox == []
 
 
-def test_admins_with_an_email_are_told_about_a_sign_up(anon_client, outbox):
-    admin, admin_email = active_user(role="ADMIN")
-    _, username = register(anon_client)
-    (to, subject, body), = [m for m in outbox if m[0] == admin_email]
-    assert username in subject and "/#users" in body
+@pytest.mark.parametrize("email", ["not-an-email", "a@b", "two@@example.test"])
+def test_invalid_email_is_422(client, headers_for, email):
+    body = {"username": new_name(), "password": PASSWORD, "email": email}
+    assert client.post("/users", json=body, headers=headers_for("ADMIN")).status_code == 422
 
 
-def test_sign_up_is_rate_limited_per_address(anon_client, outbox):
-    email = f"{uuid.uuid4().hex[:6]}@example.test"
-    codes = [register(anon_client, email=email)[0].status_code for _ in range(4)]
-    assert codes == [201, 409, 409, 429]
+def test_email_is_unique_regardless_of_case(client, headers_for, outbox):
+    _, email = active_user()
+    body = {"username": new_name(), "password": PASSWORD, "email": email.upper()}
+    assert client.post("/users", json=body, headers=headers_for("ADMIN")).status_code == 409
 
 
-# ---- approval and roles (ADMIN) -----------------------------------------------------------------
-
-def test_admin_approves_with_a_role_and_the_user_is_told(anon_client, client, headers_for, outbox):
-    _, username = register(anon_client)
-    response = client.patch(f"/users/{username}", json={"status": "ACTIVE", "role": "OPERATOR"},
-                            headers=headers_for("ADMIN"))
-    assert response.status_code == 200
-    assert (response.json()["status"], response.json()["role"]) == ("ACTIVE", "OPERATOR")
-    assert login(anon_client, username).status_code == 200
-    assert [m[1] for m in outbox if m[0] == f"{username}@example.test"] == ["Your SmartIoT account is ready"]
+@pytest.mark.parametrize("role", ["VIEWER", "OPERATOR"])
+def test_only_admins_create_accounts(client, headers_for, role):
+    body = {"username": new_name(), "password": PASSWORD, "email": f"{uuid.uuid4().hex[:6]}@example.test"}
+    assert client.post("/users", json=body, headers=headers_for(role)).status_code == 403
 
 
-def test_users_list_shows_email_and_status(anon_client, client, headers_for, outbox):
-    _, username = register(anon_client)
+def test_users_list_shows_emails(client, headers_for):
+    username, email = active_user()
     users = {u["username"]: u for u in client.get("/users", headers=headers_for("ADMIN")).json()}
-    assert users[username]["status"] == "PENDING" and users[username]["email"] == f"{username}@example.test"
+    assert users[username]["email"] == email
 
 
-def test_role_change_takes_effect_at_once(anon_client, client, headers_for):
+def test_admin_changes_a_role_and_it_takes_effect_at_once(anon_client, client, headers_for):
     username, _ = active_user()
     token = login(anon_client, username).json()["access_token"]
-    client.patch(f"/users/{username}", json={"role": "ADMIN"}, headers=headers_for("ADMIN"))
+    assert anon_client.get("/users", headers={"Authorization": f"Bearer {token}"}).status_code == 403
+    response = client.patch(f"/users/{username}", json={"role": "ADMIN"}, headers=headers_for("ADMIN"))
+    assert response.status_code == 200 and response.json()["role"] == "ADMIN"
     assert anon_client.get("/users", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
 
-@pytest.mark.parametrize("role, status_code", [("VIEWER", 403), ("OPERATOR", 403)])
-def test_only_admins_may_approve(anon_client, client, headers_for, role, status_code, outbox):
-    _, username = register(anon_client)
-    assert client.patch(f"/users/{username}", json={"status": "ACTIVE"}, headers=headers_for(role)).status_code == status_code
-    assert db_user(username).status == "PENDING"
+@pytest.mark.parametrize("role", ["VIEWER", "OPERATOR"])
+def test_only_admins_change_roles(client, headers_for, role):
+    username, _ = active_user()
+    assert client.patch(f"/users/{username}", json={"role": "ADMIN"}, headers=headers_for(role)).status_code == 403
+    assert db_user(username).role == "VIEWER"
 
 
 def test_admin_cannot_change_their_own_account(client, headers_for, test_users):
@@ -153,7 +125,7 @@ def test_admin_cannot_change_their_own_account(client, headers_for, test_users):
     assert client.patch(f"/users/{admin}", json={"role": "VIEWER"}, headers=headers_for("ADMIN")).status_code == 400
 
 
-@pytest.mark.parametrize("body", [{}, {"status": "PENDING"}, {"role": "ROOT"}, {"email": "x@y.z"}])
+@pytest.mark.parametrize("body", [{}, {"role": "ROOT"}, {"status": "ACTIVE"}, {"role": "ADMIN", "email": "x@y.z"}])
 def test_update_validation(client, headers_for, body):
     username, _ = active_user()
     assert client.patch(f"/users/{username}", json=body, headers=headers_for("ADMIN")).status_code == 422
@@ -163,18 +135,16 @@ def test_update_unknown_user_is_404(client, headers_for):
     assert client.patch(f"/users/{new_name()}", json={"role": "VIEWER"}, headers=headers_for("ADMIN")).status_code == 404
 
 
-def test_admin_can_create_a_user_with_an_email(client, headers_for):
-    username = new_name()
-    response = client.post("/users", json={"username": username, "password": PASSWORD, "role": "OPERATOR",
-                                           "email": f"{username}@Example.test"}, headers=headers_for("ADMIN"))
-    assert response.status_code == 201
-    assert response.json()["email"] == f"{username}@example.test" and response.json()["status"] == "ACTIVE"
-
-
-def test_rejecting_a_sign_up_deletes_it(anon_client, client, headers_for, outbox):
-    _, username = register(anon_client)
-    assert client.delete(f"/users/{username}", headers=headers_for("ADMIN")).status_code == 204
-    assert db_user(username) is None
+def test_a_switched_off_account_cannot_sign_in_or_use_its_token(anon_client):
+    username, _ = active_user()
+    token = login(anon_client, username).json()["access_token"]
+    with SessionLocal() as session, session.begin():
+        session.execute(update(User).where(User.username == username).values(status="DISABLED"))
+    right = login(anon_client, username)
+    assert right.status_code == 403 and right.json()["detail"] == DISABLED_DETAIL
+    wrong = login(anon_client, username, "not-the-password")
+    assert wrong.status_code == 401  # a wrong password says nothing about the account
+    assert anon_client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
 
 
 # ---- forgot username / password ---------------------------------------------------------------
@@ -199,10 +169,11 @@ def test_forgot_for_an_unknown_address_looks_the_same_and_sends_nothing(anon_cli
     assert outbox == []
 
 
-def test_forgot_for_a_pending_account_sends_nothing(anon_client, outbox):
-    _, username = register(anon_client)
-    outbox.clear()
-    anon_client.post("/auth/forgot-password", json={"email": f"{username}@example.test"})
+def test_forgot_for_a_switched_off_account_sends_nothing(anon_client, outbox):
+    username, email = active_user()
+    with SessionLocal() as session, session.begin():
+        session.execute(update(User).where(User.username == username).values(status="DISABLED"))
+    anon_client.post("/auth/forgot-password", json={"email": email})
     assert outbox == []
 
 

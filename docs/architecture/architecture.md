@@ -2,7 +2,7 @@
 
 ## Components
 
-1. Sensor Simulator — generates fictional telemetry and publishes it over MQTT
+1. Sensor Simulator — generates simulated telemetry and publishes it over MQTT
 2. MQTT Broker (Mosquitto) — routes messages between sensors and the receiver
 3. MQTT Receiver — subscribes to telemetry, parses and validates it
 4. Data Validator — enforces value ranges and required fields
@@ -11,7 +11,7 @@
 7. FastAPI Backend — REST API over the stored data, auth, sensor commands
 8. Web Dashboard (React/TypeScript) — displays sensors, telemetry, alerts
 9. Test Automation Framework — unit, API, MQTT, integration, E2E, security, performance
-10. FOTA Simulation — fictional firmware update flow
+10. FOTA Simulation — simulated firmware update flow
 11. Failure Injection — intentional faults for reliability testing
 12. Docker Environment — containerizes every service
 13. CI/CD Pipeline — GitHub Actions running the full test suite on push

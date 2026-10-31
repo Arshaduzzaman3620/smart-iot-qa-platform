@@ -586,23 +586,6 @@ form.inline input { width: 6.5em; }
   box-shadow: 0 30px 60px -30px rgb(15 23 42 / 0.25);
   animation: pop 0.5s 0.1s cubic-bezier(.2,.7,.2,1) both;
 }
-.auth-tabs {
-  position: relative; display: grid; grid-template-columns: 1fr 1fr;
-  margin-bottom: 22px; padding: 4px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border);
-}
-.auth-tabs button {
-  position: relative; z-index: 1; padding: 9px; border: none; background: none;
-  color: var(--muted); font-weight: 650; border-radius: 10px;
-}
-.auth-tabs button:hover:not(:disabled) { filter: none; color: var(--text); }
-.auth-tabs button.on { color: var(--accent); }
-.auth-tab-glider {
-  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
-  border-radius: 10px; background: var(--surface); border: 1px solid var(--border);
-  box-shadow: 0 1px 4px rgb(15 23 42 / 0.15);
-  transition: transform 0.35s cubic-bezier(.2,.8,.2,1);
-}
-.auth-tab-glider.signup { transform: translateX(100%); }
 .auth-view { animation: slide-up 0.35s cubic-bezier(.2,.7,.2,1); }
 @keyframes slide-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
@@ -654,17 +637,12 @@ form.inline input { width: 6.5em; }
 }
 .done .primary { justify-self: stretch; }
 
-/* ---- users: approvals ------------------------------------------------------------------------------ */
+/* ---- users ------------------------------------------------------------------------------------------ */
 
-.pending { margin: 0 20px 18px; padding: 14px 16px; border-radius: var(--radius); background: var(--warning-bg); }
-.pending h3 { margin: 0 0 10px !important; color: var(--warning) !important; }
-.pending .plain { margin: 0; }
-.pending-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: var(--surface) !important; }
-.pending-who { display: grid; flex: 1 1 180px; min-width: 0; }
-.pending-count { margin-left: 8px; }
-.pending-item select { padding: 7px 10px; }
+.panel > h3.form-title { margin: 4px 20px 10px; }
 .role-select { padding: 4px 8px; font-size: 0.78rem; font-weight: 650; border-radius: 999px; }
 .email-cell { color: var(--muted); }
+.login-note { text-align: center; }
 
 /* ---- Phase 18: motion ------------------------------------------------------------------------------ */
 
@@ -891,7 +869,7 @@ button.danger { background: var(--red); color: #fff; }
 
 /* ---- users ------------------------------------------------------------------------------------------- */
 
-.user-form { padding: 0 20px 16px; margin-top: 0; }
+.user-form { padding: 0 0 16px; margin-top: 0; }
 .user-form .role-hint { flex-basis: 100%; }
 .panel-error { margin: 0 20px 16px; }
 .avatar-sm { width: 28px; height: 28px; font-size: 0.8rem; }

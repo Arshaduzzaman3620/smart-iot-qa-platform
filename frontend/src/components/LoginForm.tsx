@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from "react";
 
-import { ApiError, forgotPassword, login, register, resetPassword } from "../api";
+import { ApiError, forgotPassword, login, resetPassword } from "../api";
 import type { Session } from "../types";
 import {
   BellIcon, CheckIcon, ChipIcon, DropletIcon, Logo, ShieldIcon, ThermometerIcon, WifiIcon,
@@ -12,14 +12,15 @@ interface Props {
   notice?: string | null;
 }
 
-type Mode = "signin" | "signup" | "forgot" | "reset";
+type Mode = "signin" | "forgot" | "reset";
 
 /** The reset token from an emailed link (?reset=...), if the page was opened from one. */
 function resetTokenFromUrl(): string | null {
   return new URLSearchParams(window.location.search).get("reset");
 }
 
-/** The signed-out home: sign in, create an account, recover a username or password (Phase 19). */
+/** The signed-out home: sign in, or recover a username or password (Phase 19). Accounts are created by
+ *  an administrator in Users, never here. */
 export function LoginForm({ onLogin, notice }: Props) {
   const [token] = useState(resetTokenFromUrl);
   const [mode, setMode] = useState<Mode>(token ? "reset" : "signin");
@@ -41,25 +42,15 @@ export function LoginForm({ onLogin, notice }: Props) {
       <Showcase />
       <main className="login-main">
         <div className="auth-card">
-          {(mode === "signin" || mode === "signup") && (
-            <div className="auth-tabs" role="tablist" aria-label="Account">
-              <button type="button" role="tab" aria-selected={mode === "signin"} data-testid="auth-tab-signin"
-                      className={mode === "signin" ? "on" : undefined} onClick={() => go("signin")}>Sign in</button>
-              <button type="button" role="tab" aria-selected={mode === "signup"} data-testid="auth-tab-signup"
-                      className={mode === "signup" ? "on" : undefined} onClick={() => go("signup")}>Create account</button>
-              <span className={`auth-tab-glider ${mode}`} aria-hidden="true" />
-            </div>
-          )}
           <div className="auth-view" key={mode}>
             {mode === "signin" && (
               <SignIn onLogin={onLogin} notice={notice} flash={flash} onForgot={() => go("forgot")} />
             )}
-            {mode === "signup" && <SignUp onDone={(m) => go("signin", m)} />}
             {mode === "forgot" && <Forgot onBack={() => go("signin")} />}
             {mode === "reset" && token && <Reset token={token} onDone={(m) => go("signin", m)} onBack={() => go("forgot")} />}
           </div>
         </div>
-        <p className="meta login-foot">Fictional, fully simulated devices · SmartIoT QA platform</p>
+        <p className="meta login-foot">SmartIoT · Smart home control center</p>
       </main>
     </div>
   );
@@ -120,52 +111,7 @@ function SignIn({ onLogin, notice, flash, onForgot }: {
         Forgot username or password?
       </button>
       <Submit busy={busy} testId="login-submit" idle="Sign in" working="Signing in…" />
-    </form>
-  );
-}
-
-function SignUp({ onDone }: { onDone: (message: string) => void }) {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [done, setDone] = useState<string | null>(null);
-  const { busy, error, setError, run } = useSubmit();
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (password !== confirm) return setError("The passwords don't match");
-    run(async () => setDone((await register(username.trim(), email.trim(), password)).detail));
-  }
-
-  if (done) {
-    return (
-      <Done testId="signup-done" title="Request sent" text={done}
-            action="Back to sign in" onAction={() => onDone("Your account request was sent. You can sign in once it is approved.")} />
-    );
-  }
-
-  return (
-    <form className="login" onSubmit={submit} data-testid="signup-form">
-      <Heading title="Create your account" text="An administrator approves new accounts before the first sign-in." />
-      {error && <div role="alert" className="error" data-testid="signup-error">{error}</div>}
-      <label>
-        Username
-        <input data-testid="signup-username" autoComplete="username" required minLength={3} maxLength={50}
-               pattern="[A-Za-z0-9_.\-]+" title="3-50 characters: letters, digits, _ . -"
-               placeholder="letters, digits, _ . -" value={username} onChange={(e) => setUsername(e.target.value)} />
-      </label>
-      <label>
-        Email
-        <input data-testid="signup-email" type="email" autoComplete="email" required maxLength={254}
-               placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <span className="hint">Used only to recover your username or password.</span>
-      </label>
-      <PasswordField label="Password" testId="signup-password" autoComplete="new-password" value={password}
-                     onChange={setPassword} strength />
-      <PasswordField label="Confirm password" testId="signup-confirm" autoComplete="new-password" value={confirm}
-                     onChange={setConfirm} />
-      <Submit busy={busy} testId="signup-submit" idle="Create account" working="Creating…" />
+      <p className="meta login-note" data-testid="no-signup-note">Need an account? Ask your administrator.</p>
     </form>
   );
 }

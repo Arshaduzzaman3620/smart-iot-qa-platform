@@ -38,7 +38,7 @@ def _add_latest_reading_pointer(engine: Engine) -> bool:
 
 
 def _add_user_accounts(engine: Engine) -> bool:
-    """Phase 19: users.email / status / password_changed_at (sign-up, approval, password reset)."""
+    """Phase 19: users.email / status / password_changed_at (account email, password reset)."""
     columns = {c["name"] for c in inspect(engine).get_columns("users")}
     if "email" in columns:
         return False

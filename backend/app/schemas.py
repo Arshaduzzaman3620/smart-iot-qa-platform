@@ -87,7 +87,6 @@ class UserOut(_UTCModel):
     role: str
     created_at: datetime
     email: str | None = None
-    status: str = "ACTIVE"  # or PENDING: waiting for an admin's approval
 
 
 class TokenOut(BaseModel):
@@ -118,27 +117,10 @@ class UserCreateIn(_StrictIn):
     _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _clean_email(v)))
 
 
-class RegisterIn(_StrictIn):
-    """POST /auth/register: anyone may ask for an account; it starts PENDING and VIEWER."""
-
-    username: str = USERNAME
-    email: str = Field(max_length=254, pattern=EMAIL_PATTERN)
-    password: str = PASSWORD
-
-    _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _clean_email(v)))
-
-
 class UserUpdateIn(_StrictIn):
-    """PATCH /users/{username} (ADMIN): approve a sign-up and/or change the role."""
+    """PATCH /users/{username} (ADMIN): change the role."""
 
-    role: Role | None = None
-    status: Literal["ACTIVE"] | None = None  # approving is the only status change; rejecting is DELETE
-
-    @model_validator(mode="after")
-    def _not_empty(self):
-        if not self.model_fields_set:
-            raise ValueError("send at least one of: role, status")
-        return self
+    role: Role
 
 
 class ForgotIn(_StrictIn):

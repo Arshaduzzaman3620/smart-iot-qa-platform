@@ -47,9 +47,7 @@ export interface User {
   username: string;
   role: Role;
   created_at: string;
-  email?: string | null;
-  // PENDING: signed up, waiting for an admin's approval (Phase 19)
-  status?: "ACTIVE" | "PENDING";
+  email?: string | null; // for "forgot username or password" (Phase 19)
 }
 
 /** POST /auth/login response, kept for the browser session. */

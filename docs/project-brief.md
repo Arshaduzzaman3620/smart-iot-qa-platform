@@ -1,84 +1,106 @@
-# SmartIoT: project brief
+# SmartIoT Home Control Platform
 
-**One sentence:** a fully simulated smart-home IoT platform (sensors, MQTT broker, receiver, database, REST API, web dashboard), built phase by phase to show professional software quality engineering: every layer is tested, secured, measured and documented.
+**Project brief** · Software Quality Assurance and Test Automation · Author: Arshaduzzaman
 
-Everything is fictional: no real devices, company code or data.
+## Summary
 
-## The problem it models
+SmartIoT is a complete smart-home monitoring platform that I designed, built and tested end to end. Sensors in every room report temperature, humidity, air pressure, light and battery level. The platform collects these readings, checks them, stores them, raises alerts when something is wrong, and presents everything in a secure web dashboard. From there, people can control devices and install software updates remotely.
 
-A home or building has many small sensors (temperature, humidity, pressure, light, battery). Their readings must arrive reliably, be checked, stored and shown; people must be warned when something is wrong, and the devices must be controllable and updatable remotely. All of this has to keep working when parts fail, and only the right people may do the right things.
+The project's purpose is to demonstrate professional quality engineering: how a real product is planned, built in small verified steps, tested at every level, secured, measured under load and documented. The sensors are simulated in software, so the whole system runs on a single laptop with one command.
 
-## What it does
+## What the product does
 
-| For the user | How |
+| Capability | What it means for the user |
 |---|---|
-| See the whole home at a glance | Dashboard with a home status banner, overview tiles, list and rooms views, trend charts |
-| Be warned in time | Threshold alerts (battery, temperature, humidity) with escalation, offline detection |
-| Control devices | Restart, request a reading, change the interval, each outcome tracked |
-| Update firmware over the air | Upload, roll out, verified install, safe failure (the device keeps its old firmware) |
-| Manage access | Sign-in, roles VIEWER / OPERATOR / ADMIN, user management |
-| Get an account and recover it | Self sign-up with admin approval, forgot username / password by email, one-time reset links |
+| Live home overview | One screen shows how the home is doing: devices online, average temperature and humidity, and anything that needs attention, updated every few seconds |
+| Alerts | Automatic warnings for low batteries, temperatures out of range, high humidity and devices that stop reporting |
+| Device control | Restart a device, ask for a fresh reading, or change how often it reports, and see the result |
+| Remote software updates | Upload a new firmware version and install it on a device; a failed or interrupted update leaves the device on its previous version |
+| Secure access | Sign-in with three roles (viewer, operator, administrator); administrators create and remove accounts and assign roles |
+| Account recovery | A user who forgets their username or password receives both by email, with a one-time, time-limited reset link |
 
-## How it is built
+## My role and approach
+
+I owned the project from requirements to final report: planning, architecture, implementation, test strategy, automation, security, performance testing, CI/CD and documentation.
+
+The work was split into 19 phases. Every phase followed the same professional routine:
+
+1. Build only that phase's scope.
+2. Verify it by hand on the running system.
+3. Add automated tests for normal use, invalid input and edge cases.
+4. Update the documentation.
+5. Review, commit and merge through a pull request with automated checks.
+
+This mirrors how quality-focused teams deliver software: small, verified increments with evidence at each step.
+
+## Results
+
+| Area | Result |
+|---|---|
+| Automated tests | **813 tests** across 7 levels, from single functions to the full system in a real browser; all passing |
+| Requirements | **11 of 11** requirements traced to the tests that prove them |
+| Defects | **41 defects** found and fixed during development, each now guarded by a test |
+| Reliability | **No data lost or duplicated** when the database, message broker or data receiver failed during operation |
+| Performance | **303 requests per second** with 300 simultaneous users and **0 % errors** |
+| Scale | **100 devices** reporting every second, stored within one second |
+| Security | Encrypted connections everywhere (TLS), role-based access, protection against password guessing, secure account recovery, automatic checks for vulnerable dependencies |
+| Test effectiveness | Deliberately introduced bugs were caught by the test suite (mutation checks) |
+
+## Quality engineering highlights
+
+- **Layered test strategy.** Fast unit tests for logic; integration tests against a real database and message broker; browser tests for every screen state; end-to-end tests with simulated devices. When something breaks, the failing level points to the cause.
+- **Failure testing.** The database, broker and receiver were switched off in the middle of operation to prove that no reading is lost or counted twice.
+- **Performance testing that changed the design.** Load tests revealed that the API stopped responding after heavy traffic. The fix raised throughput from 124 to 303 requests per second with zero errors.
+- **Security verified by tests, not assumed.** Every role was tested against every function, every device account against every message channel, and outdated encryption versions were confirmed to be refused by the server.
+- **Continuous integration.** Every pull request runs the full test suite, a fresh start of the whole system, and a dependency vulnerability audit on GitHub Actions.
+- **AI-assisted QA.** A tool built on the Claude API turns a written requirement into structured test cases and explains why a test run failed.
+
+## Technology
+
+| Area | Tools |
+|---|---|
+| Languages | Python, TypeScript |
+| Backend | FastAPI (REST API), SQLAlchemy, MySQL |
+| Device messaging | MQTT (Mosquitto broker) |
+| Frontend | React, Vite, nginx |
+| Testing | pytest, Playwright (browser automation), k6 (load testing) |
+| Security | TLS certificates, JWT sign-in, role-based access control |
+| DevOps | Docker, Docker Compose, GitHub Actions |
+| AI | Claude API (Anthropic) |
+
+## Architecture at a glance
 
 ```text
-Sensors (simulated, Python) --MQTT over TLS--> Mosquitto broker (accounts, ACLs)
-        ^ commands, firmware                          |
-        |                                              v
-   FastAPI REST API (JWT roles) <---- MySQL <---- Receiver (validate, batch, alerts)
-        ^
-        | HTTPS
-   React dashboard (TypeScript, nginx)
+Room sensors ──encrypted MQTT──▶ Message broker ──▶ Data receiver ──▶ Database
+     ▲                                                                 │
+     │ commands and updates                                            ▼
+     └─────────────────────── REST API ◀───────────────────────────────┘
+                                 ▲
+                          encrypted HTTPS
+                                 │
+                          Web dashboard
 ```
 
-Python, FastAPI, SQLAlchemy, MySQL 8.4, Mosquitto, paho-mqtt, React + TypeScript + Vite, nginx, Docker Compose, GitHub Actions. Tests: pytest, Playwright, k6. AI-assisted QA with the Claude API.
+Each part has a single responsibility and can be tested on its own, which is what makes the layered test strategy possible.
 
-## Evidence of quality
+## Five-minute demonstration
 
-| Claim | Proof |
-|---|---|
-| 823 automated tests in 7 layers (unit, API, MQTT, integration, reliability, browser UI, end-to-end), all passing | [final report](testing/final-report.md#test-inventory), `docker compose -f compose.test.yaml run --rm --build tests` |
-| Tests catch real regressions | Mutation checks: widening a sensor limit failed 3 tests in 3 layers; removing a UI fix failed its test ([final report](testing/final-report.md)) |
-| No data lost or duplicated through outages | MySQL, broker and receiver killed mid-stream: 0 lost, 0 duplicated ([reliability](testing/reliability.md)) |
-| Fast under load | 303 requests/s at 300 concurrent users, 0 % errors; 100 sensors at 1 reading/s ([performance](testing/performance.md)) |
-| Secure by default | JWT roles, broker accounts + ACLs, rate-limited login, CSP and security headers, TLS on every connection, production mode that refuses dev settings, dependency audit in CI ([security](security/security.md), [TLS](security/tls.md)) |
-| Every requirement covered | 11 of 11 requirements traced to tests ([traceability](testing/final-report.md#requirements-traceability)) |
-| Honest about defects | 41 defects found and fixed, each with the test that now guards it ([defect log](testing/final-report.md#defect-log)) |
-| Reproducible anywhere | One command starts everything on macOS, Windows or Linux; CI repeats the tests, a fresh full-stack start and the audit on every pull request |
+1. Start everything with `docker compose up -d --build` and open https://localhost:8443.
+2. Sign in as the administrator. The home status banner and overview tiles show the live state of the home.
+3. Under **Devices**, search, filter offline devices, sort by temperature, and switch to the rooms view.
+4. Open a device: view its trend chart, then restart it (the system asks for confirmation) and watch the command complete.
+5. Under **Firmware**, upload a version and install it on a device; watch it download, verify and install.
+6. Under **Users**, create an account with an email address, then use **Forgot username or password?** on the sign-in page and open the email at http://localhost:8025.
+7. Stop the database for a moment and start it again: the dashboard reports the outage, and no data is lost.
+8. Run the full test suite: `docker compose -f compose.test.yaml run --rm --build tests`.
 
-## How it was built
+## Skills demonstrated
 
-19 phases, each one: implement only that scope, verify by hand, add positive / negative / boundary tests, update the docs, then commit and review. Highlights:
+Test strategy and planning · Test automation (API, integration, UI, end to end) · Performance and reliability testing · Security testing · Defect analysis and reporting · Requirements traceability · CI/CD · Docker · Python and TypeScript development · Technical documentation · AI-assisted testing
 
-| Phases | What |
-|---|---|
-| 0–9 | Plan, requirements, simulator, MQTT, receiver, validation, database |
-| 10–14 | REST API, dashboard, end-to-end, test automation, 100-sensor scale |
-| 15a–15g | Alerts, batched writes, auth and roles, commands, firmware over the air, reliability, security and performance |
-| 16 | AI QA assistant (generates test cases, explains failing runs), final report |
-| 17 | TLS everywhere, production configuration check |
-| 18 | Dashboard as a modern smart-home app: redesign, motion, search / filter / sort, rooms view, users screen |
-| 19 | Accounts: sign-up with approval, email, forgot username / password, reset links; animated sign-in page |
+## Further reading
 
-## A 5-minute demo
-
-1. `docker compose up -d --build`, open https://localhost:8443, sign in (`admin` / `admin-dev-password`, or your own `.env`).
-2. The **home status** banner and tiles: everything live, refreshing every 5 s.
-3. **Devices**: search with `/`, filter Offline, sort by temperature, switch to **Rooms**.
-4. Open a sensor: trend chart, change the range to 100, **Restart** (it asks first), watch the command turn SUCCEEDED.
-5. **Firmware**: upload an image, update a sensor, watch DOWNLOADING → VERIFYING → INSTALLING → SUCCEEDED.
-6. Sign out, **Create account**, then approve it in Users as admin; try **Forgot username or password?** and open the email at http://localhost:8025.
-7. Stop MySQL (`docker compose stop mysql`), watch the dashboard say so, start it again: nothing was lost.
-8. Run the tests: `docker compose -f compose.test.yaml run --rm --build tests`.
-
-## Talking points
-
-- **Testing is layered on purpose:** fast unit tests for logic, real broker and database for integration, a real browser for the UI, and the whole stack for end-to-end, so each failure points at one layer.
-- **Failures are designed in, not hoped away:** TCP proxies cut the database and broker mid-test; acknowledgements happen only after data is stored.
-- **Measurements changed the design:** load tests found an API that stopped responding after a stress run; the fix took it from 124 to 303 requests/s.
-- **Recovery without leaks:** reset links are single-use, stored only as a hash, end every session, and the forgot form answers the same for every address.
-- **Security is checked, not assumed:** every role against every endpoint, every broker account against every topic, the broker's own refusal of old TLS versions.
-
-## What would come next
-
-Per-device broker credentials, live push updates (WebSockets), database migrations and data retention, monitoring (Prometheus / Grafana), automated backups. See [known limits](testing/final-report.md#known-limits).
+- [Final QA report](testing/final-report.md): test inventory, requirements traceability, defect log, known limitations
+- [Reliability tests](testing/reliability.md) and [performance tests](testing/performance.md)
+- [Security](security/security.md) and [encryption (TLS)](security/tls.md)
+- [README](../README.md): quick start and feature overview

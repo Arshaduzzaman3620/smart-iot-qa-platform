@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.models import PasswordReset, User
@@ -14,19 +13,19 @@ from database.models import PasswordReset, User
 from .. import mailer
 from ..deps import get_current_user, get_db
 from ..rate_limit import LoginLimiter
-from ..schemas import ForgotIn, LoginIn, MessageOut, RegisterIn, ResetIn, TokenOut, UserOut
+from ..schemas import ForgotIn, LoginIn, MessageOut, ResetIn, TokenOut, UserOut
 from ..security import DUMMY_HASH, TOKEN_MINUTES, create_token, hash_password, verify_password
 
 logger = logging.getLogger("backend.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = LoginLimiter()
-# Phase 19. Each request counts (not only failures), so they cap how often someone can sign up or ask
-# for reset emails: per email address and per client, within an hour.
-signup_limiter = LoginLimiter(per_user=3, per_client=10, window=3600)
+# Phase 19. Every request counts (not only failures), so it caps how often someone can ask for reset
+# emails: per email address and per client, within an hour.
 forgot_limiter = LoginLimiter(per_user=3, per_client=10, window=3600)
 
 RESET_MINUTES = int(os.getenv("RESET_MINUTES", "30"))
-PENDING_DETAIL = "Your account is waiting for an administrator's approval"
+# Accounts are created by an admin and are ACTIVE; the status column lets an account be switched off.
+DISABLED_DETAIL = "This account is disabled. Contact your administrator."
 FORGOT_DETAIL = "If that email belongs to an account, we have sent the username and a reset link to it."
 BAD_RESET_DETAIL = "This reset link is invalid or has expired. Ask for a new one."
 
@@ -76,7 +75,7 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     if user.status != "ACTIVE":
         # Only after the password matched, so this doesn't reveal which usernames exist.
         logger.info("Login for %s refused: account %s", user.username, user.status)
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=PENDING_DETAIL)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=DISABLED_DETAIL)
     logger.info("User %s logged in (%s)", user.username, user.role)
     return TokenOut(access_token=create_token(user.username, user.role), expires_in=TOKEN_MINUTES * 60,
                     user=UserOut.model_validate(user))
@@ -85,29 +84,6 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return user
-
-
-@router.post("/register", response_model=MessageOut, status_code=status.HTTP_201_CREATED,
-             responses={409: {"description": "Username or email already in use"}, 429: {"description": "Too many"}})
-def register(body: RegisterIn, request: Request, tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Ask for an account. It starts as a PENDING VIEWER: no sign-in until an admin approves it."""
-    _too_many(signup_limiter, body.email, client_address(request))
-    user = User(username=body.username, email=body.email, password_hash=hash_password(body.password),
-                role="VIEWER", status="PENDING")
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Username or email already in use")
-    logger.info("Sign-up: %s (%s) waiting for approval", user.username, user.email)
-    admins = db.scalars(select(User.email).where(User.role == "ADMIN", User.status == "ACTIVE",
-                                                 User.email.is_not(None))).all()
-    for address in admins:
-        tasks.add_task(mailer.send_email, address, f"SmartIoT: {user.username} is waiting for approval",
-                       f"{user.username} ({user.email}) asked for an account.\n\n"
-                       f"Approve or reject it in Users: {mailer.app_url()}/#users\n")
-    return MessageOut(detail="Account created. An administrator must approve it before you can sign in.")
 
 
 @router.post("/forgot-password", response_model=MessageOut, status_code=status.HTTP_202_ACCEPTED,

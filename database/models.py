@@ -98,7 +98,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     # Phase 19 (docs/api/auth.md): for "forgot username or password". Optional for accounts made earlier.
     email: Mapped[str | None] = mapped_column(String(254), unique=True, nullable=True)
-    # ACTIVE, or PENDING: signed up and waiting for an admin's approval (cannot sign in yet).
+    # Accounts are created ACTIVE by an admin; any other value can't sign in (room to disable an account).
     status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ACTIVE")
     # Tokens issued before this moment stop working (set when the password is reset or changed).
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -1,6 +1,6 @@
 # Security
 
-What protects each part of the platform, and the tests that prove it. Everything here is fictional and local: the passwords below are **dev defaults** for a project that runs on one machine. Set your own in `.env` for anything else.
+What protects each part of the platform, and the tests that prove it. The platform runs locally: the passwords below are **dev defaults** for a project that runs on one machine. Set your own in `.env` for anything else.
 
 ## Threats and controls
 
@@ -24,8 +24,8 @@ What protects each part of the platform, and the tests that prove it. Everything
 | Leaking internals | Database errors become a bare `503`. No stack traces in responses, no `Server` version from nginx. | `main.py`, `nginx.conf` | `test_health.py`, `test_api_security.py` |
 | Vulnerable dependencies | Exact version pins. CI runs `pip-audit` (Python) and `npm audit --omit=dev` (dashboard) on every push. | `.github/workflows/ci.yml` | CI |
 | **Eavesdropping, man in the middle** | TLS on every connection that leaves a container: HTTPS, MQTT 8883, MySQL with `require_secure_transport`. Clients check the certificate and host name. Plain ports only on 127.0.0.1. | [tls.md](tls.md) | `test_tls.py`, `test_broker_tls.py`, CI full-stack job |
-| Account takeover through recovery | Reset links: 32 random bytes, only their SHA-256 stored, single use, 30 min, a new one cancels the old; sessions end on reset; the owner is emailed. Recovery never reveals whether an address exists (same answer, email in the background). Rate limited per address and client. | `api/auth.py`, [auth.md](../api/auth.md#accounts-sign-up-approval-recovery-phase-19) | `test_accounts.py` |
-| Self-registration abuse | Sign-ups start PENDING and VIEWER, can't choose a role, need an admin's approval; rate limited | `api/auth.py` | `test_accounts.py`, `test_accounts_ui.py` |
+| Account takeover through recovery | Reset links: 32 random bytes, only their SHA-256 stored, single use, 30 min, a new one cancels the old; sessions end on reset; the owner is emailed. Recovery never reveals whether an address exists (same answer, email in the background). Rate limited per address and client. | `api/auth.py`, [auth.md](../api/auth.md#accounts-and-recovery-phase-19) | `test_accounts.py` |
+| Unwanted accounts | No public sign-up: only an ADMIN creates accounts and assigns roles | `api/users.py` | `test_accounts.py` (`/auth/register` does not exist, only ADMIN may create) |
 | Production with dev settings | `APP_ENV=production` refuses to start with dev passwords, a weak `JWT_SECRET` or without TLS | `backend/app/config_check.py` | `test_tls.py` |
 | Secrets in git | `.env` is git-ignored. Passwords and `JWT_SECRET` come only from the environment, and logs never contain them. | | review |
 

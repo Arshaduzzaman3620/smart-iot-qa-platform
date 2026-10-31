@@ -122,18 +122,14 @@ export function createUser(username: string, password: string, role: Role, email
   });
 }
 
-/** Approve a sign-up and/or change the role (Phase 19). */
-export function updateUser(username: string, changes: { role?: Role; status?: "ACTIVE" }): Promise<User> {
-  return request<User>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify(changes) });
+/** Change another account's role (Phase 19). */
+export function updateUser(username: string, role: Role): Promise<User> {
+  return request<User>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify({ role }) });
 }
 
 // ---- accounts without signing in (Phase 19) ----
 
 interface Message { detail: string }
-
-export function register(username: string, email: string, password: string): Promise<Message> {
-  return request<Message>("/auth/register", { method: "POST", body: JSON.stringify({ username, email, password }) });
-}
 
 export function forgotPassword(email: string): Promise<Message> {
   return request<Message>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });

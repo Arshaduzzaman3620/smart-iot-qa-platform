@@ -1,14 +1,14 @@
 # SmartIoT Sensor Quality Engineering Platform
 
-A fully simulated, fictional IoT sensor platform built to learn and demonstrate Software Quality Assurance and test automation end-to-end: Python, TypeScript, MQTT, FastAPI, MySQL, Playwright, pytest, Docker, CI/CD, and AI-assisted QA.
+A smart-home IoT platform with simulated sensors, built to demonstrate professional Software Quality Assurance and test automation end to end: Python, TypeScript, MQTT, FastAPI, MySQL, Playwright, pytest, Docker, CI/CD, and AI-assisted QA.
 
 
 
 ## What this is
 
-Virtual sensors send fictional telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
+Simulated sensors send telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
 
-**Results:** 823 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
+**Results:** 813 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
 
 ## Quick start
 
@@ -17,11 +17,11 @@ The only requirement is [Docker Desktop](https://www.docker.com/products/docker-
 ```bash
 docker compose up -d --build                                  # the whole platform, with 5 simulated sensors
 # dashboard: https://localhost:8443  (sign in: admin / admin-dev-password)
-# emails:    http://localhost:8025     (Mailpit: password resets, approvals)
+# emails:    http://localhost:8025     (Mailpit: welcome and password reset emails)
 # API docs:  https://localhost:8443/api/docs
 # First time: trust certs/ca.crt, or the browser warns (docs/security/tls.md)
 
-docker compose -f compose.test.yaml run --rm --build tests     # all 823 tests (~5 min)
+docker compose -f compose.test.yaml run --rm --build tests     # all 813 tests (~5 min)
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
 docker compose down                                           # stop
 ```
@@ -35,7 +35,7 @@ Running services with Python and Node on the host instead, plus troubleshooting:
 | Telemetry pipeline | Sensors → MQTT → receiver (parse, validate, store in batches) → MySQL → API → dashboard | [architecture](docs/architecture/architecture.md), [database](docs/architecture/database.md) |
 | Alerts | Threshold alerts (battery, temperature, humidity) with escalation and hysteresis; offline detection | [alerts](docs/architecture/alerts.md) |
 | Access control | JWT sign-in, VIEWER / OPERATOR / ADMIN, user management, login rate limiting | [auth](docs/api/auth.md) |
-| Accounts | Self sign-up with admin approval, email on every account, forgot username / password by email with one-time reset links, sessions end on reset (Mailpit as local inbox) | [accounts](docs/api/auth.md#accounts-sign-up-approval-recovery-phase-19) |
+| Accounts | Admin-managed accounts with email and roles, welcome email, forgot username / password by email with one-time reset links, sessions end on reset (Mailpit as local inbox) | [accounts](docs/api/auth.md#accounts-and-recovery-phase-19) |
 | Commands | Restart, request a reading, change the interval, with each outcome tracked | [commands](docs/architecture/commands.md) |
 | Firmware over the air | Upload, scoped download tokens, verified install and reboot, injectable failures | [FOTA](docs/architecture/fota.md) |
 | Reliability | At-least-once with deduplication through MySQL, broker and receiver failures | [reliability](docs/testing/reliability.md) |

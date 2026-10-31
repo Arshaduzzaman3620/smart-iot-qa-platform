@@ -1,5 +1,5 @@
-"""Phase 19 in the browser, API mocked: create an account, forgot username / password, reset from the
-emailed link, password field helpers, and approving sign-ups in Users."""
+"""Phase 19 in the browser, API mocked: no public sign-up, forgot username / password, reset from the
+emailed link, password field helpers, and accounts with email in the admin's Users screen."""
 
 import json
 
@@ -23,88 +23,32 @@ def capture(page, pattern, status=200, body=None):
     return sent
 
 
-# ---- create account -------------------------------------------------------------------------------
+# ---- sign-in page ----------------------------------------------------------------------------------
 
-def fill_signup(page, password="Good-Password-1!", confirm=None):
-    page.get_by_test_id("auth-tab-signup").click()
-    page.get_by_test_id("signup-username").fill("ann")
-    page.get_by_test_id("signup-email").fill("ann@example.com")
-    page.get_by_test_id("signup-password").fill(password)
-    page.get_by_test_id("signup-confirm").fill(confirm if confirm is not None else password)
-
-
-def test_create_account_then_back_to_sign_in(open_signed_out, page):
-    sent = capture(page, "**/api/auth/register", 201,
-                   {"detail": "Account created. An administrator must approve it before you can sign in."})
+def test_sign_in_page_has_no_sign_up(open_signed_out, page):
     open_signed_out()
-    fill_signup(page)
-    page.get_by_test_id("signup-submit").click()
-    expect(page.get_by_test_id("signup-done")).to_contain_text("An administrator must approve it")
-    assert sent == [{"username": "ann", "email": "ann@example.com", "password": "Good-Password-1!"}]
-    page.get_by_test_id("back-to-signin").click()
     expect(page.get_by_test_id("login-form")).to_be_visible()
-    expect(page.get_by_test_id("auth-flash")).to_contain_text("once it is approved")
+    expect(page.get_by_text("Create account")).to_have_count(0)
+    expect(page.get_by_test_id("no-signup-note")).to_have_text("Need an account? Ask your administrator.")
 
 
-def test_mismatched_passwords_are_not_sent(open_signed_out, page):
-    sent = capture(page, "**/api/auth/register", 201, {"detail": "ok"})
+def test_show_password_toggle(open_signed_out, page):
     open_signed_out()
-    fill_signup(page, confirm="Something-Else-2!")
-    page.get_by_test_id("signup-submit").click()
-    expect(page.get_by_test_id("signup-error")).to_have_text("The passwords don't match")
-    assert sent == []
-
-
-def test_taken_username_shows_the_api_message(open_signed_out, page):
-    capture(page, "**/api/auth/register", 409, {"detail": "Username or email already in use"})
-    open_signed_out()
-    fill_signup(page)
-    page.get_by_test_id("signup-submit").click()
-    expect(page.get_by_test_id("signup-error")).to_have_text("Username or email already in use")
-    expect(page.get_by_test_id("signup-form")).to_be_visible()
-
-
-def test_invalid_email_is_stopped_by_the_form(open_signed_out, page):
-    sent = capture(page, "**/api/auth/register", 201, {"detail": "ok"})
-    open_signed_out()
-    fill_signup(page)
-    page.get_by_test_id("signup-email").fill("not-an-email")
-    page.get_by_test_id("signup-submit").click()
-    page.wait_for_timeout(300)
-    assert sent == []
-
-
-def test_password_strength_and_show_toggle(open_signed_out, page):
-    open_signed_out()
-    page.get_by_test_id("auth-tab-signup").click()
-    field = page.get_by_test_id("signup-password")
-    for value, label in [("short", "Too short"), ("lowercase1", "Fair"), ("longer-password", "Good"),
-                         ("Longer-Password-1!", "Strong")]:
-        field.fill(value)
-        expect(page.get_by_test_id("password-strength")).to_have_text(label)
+    field = page.get_by_test_id("login-password")
+    field.fill("secret-pass")
     expect(field).to_have_attribute("type", "password")
-    page.get_by_test_id("signup-password-toggle").click()
+    page.get_by_test_id("login-password-toggle").click()
     expect(field).to_have_attribute("type", "text")
-    expect(page.get_by_test_id("signup-password-toggle")).to_have_attribute("aria-pressed", "true")
+    expect(page.get_by_test_id("login-password-toggle")).to_have_attribute("aria-pressed", "true")
 
 
-def test_tabs_switch_between_sign_in_and_create(open_signed_out, page):
-    open_signed_out()
-    expect(page.get_by_test_id("auth-tab-signin")).to_have_attribute("aria-selected", "true")
-    page.get_by_test_id("auth-tab-signup").click()
-    expect(page.get_by_test_id("signup-form")).to_be_visible()
-    expect(page.get_by_test_id("login-form")).to_have_count(0)
-    page.get_by_test_id("auth-tab-signin").click()
-    expect(page.get_by_test_id("login-form")).to_be_visible()
-
-
-def test_pending_account_is_told_to_wait(open_signed_out, mock_login_api, page):
-    mock_login_api({"detail": "Your account is waiting for an administrator's approval"}, status=403)
+def test_switched_off_account_is_told(open_signed_out, mock_login_api, page):
+    mock_login_api({"detail": "This account is disabled. Contact your administrator."}, status=403)
     open_signed_out()
     page.get_by_test_id("login-username").fill("ann")
     page.get_by_test_id("login-password").fill("Good-Password-1!")
     page.get_by_test_id("login-submit").click()
-    expect(page.get_by_test_id("login-error")).to_have_text("Your account is waiting for an administrator's approval")
+    expect(page.get_by_test_id("login-error")).to_have_text("This account is disabled. Contact your administrator.")
 
 
 # ---- forgot and reset -------------------------------------------------------------------------------
@@ -157,16 +101,25 @@ def test_reset_mismatch_is_not_sent(page, dashboard_server):
     assert sent == []
 
 
+def test_new_password_strength(page, dashboard_server):
+    page.goto(f"{ROOT}/?reset=tok-1234567890abcdefghijklmnop")
+    field = page.get_by_test_id("reset-password")
+    for value, label in [("short", "Too short"), ("lowercase1", "Fair"), ("longer-password", "Good"),
+                         ("Longer-Password-1!", "Strong")]:
+        field.fill(value)
+        expect(page.get_by_test_id("password-strength")).to_have_text(label)
+
+
 def test_sign_in_page_fits_a_phone(open_signed_out, page):
     page.set_viewport_size({"width": 375, "height": 700})
     open_signed_out()
     expect(page.get_by_test_id("login-form")).to_be_visible()
-    page.get_by_test_id("auth-tab-signup").click()
-    expect(page.get_by_test_id("signup-form")).to_be_visible()
+    page.get_by_test_id("forgot-link").click()
+    expect(page.get_by_test_id("forgot-form")).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") <= 0
 
 
-# ---- approving sign-ups (ADMIN) -------------------------------------------------------------------
+# ---- accounts in Users (ADMIN) --------------------------------------------------------------------
 
 def users_api(page, users):
     calls = []
@@ -185,7 +138,7 @@ def users_api(page, users):
             return route.fulfill(status=204, body="")
         if method == "POST":
             body = route.request.post_data_json
-            users.append({**body, "status": "ACTIVE", "created_at": "2026-10-31T09:00:00Z"})
+            users.append({**body, "created_at": "2026-10-31T09:00:00Z"})
             return route.fulfill(status=201, content_type="application/json", body=json.dumps(users[-1]))
         route.fulfill(status=200, content_type="application/json", body=json.dumps(users))
 
@@ -195,43 +148,17 @@ def users_api(page, users):
 
 def people():
     return [
-        {"username": "ui-tester", "role": "ADMIN", "status": "ACTIVE", "email": None, "created_at": "2026-10-24T11:00:00Z"},
-        {"username": "olga", "role": "OPERATOR", "status": "ACTIVE", "email": "olga@example.com", "created_at": "2026-10-24T11:30:00Z"},
-        {"username": "ann", "role": "VIEWER", "status": "PENDING", "email": "ann@example.com", "created_at": "2026-10-31T08:00:00Z"},
+        {"username": "ui-tester", "role": "ADMIN", "email": None, "created_at": "2026-10-24T11:00:00Z"},
+        {"username": "olga", "role": "OPERATOR", "email": "olga@example.com", "created_at": "2026-10-24T11:30:00Z"},
     ]
 
 
-def test_pending_sign_ups_are_listed_apart(open_dashboard, mock_sensors_api, page):
+def test_users_show_emails_and_the_add_form(open_dashboard, mock_sensors_api, page):
     mock_sensors_api([sensor()])
     users_api(page, people())
     open_dashboard("ADMIN")
-    expect(page.get_by_test_id("pending-count")).to_have_text("1 waiting")
-    expect(page.get_by_test_id("pending-ann")).to_contain_text("ann@example.com")
-    expect(page.get_by_test_id("user-row-ann")).to_have_count(0)  # not among the active accounts
+    expect(page.get_by_test_id("users-panel").get_by_role("heading", name="Add a user")).to_be_visible()
     expect(page.get_by_test_id("user-row-olga")).to_contain_text("olga@example.com")
-
-
-def test_approve_with_a_role(open_dashboard, mock_sensors_api, page):
-    mock_sensors_api([sensor()])
-    calls = users_api(page, people())
-    open_dashboard("ADMIN")
-    page.get_by_test_id("pending-ann").get_by_test_id("approve-role").select_option("OPERATOR")
-    page.get_by_test_id("pending-ann").get_by_test_id("approve").click()
-    expect(page.get_by_test_id("toast")).to_have_text("ann approved as OPERATOR")
-    expect(page.get_by_test_id("user-row-ann")).to_be_visible()
-    expect(page.get_by_test_id("pending-users")).to_have_count(0)
-    assert ("PATCH", "/users/ann", {"status": "ACTIVE", "role": "OPERATOR"}) in calls
-
-
-def test_reject_asks_first(open_dashboard, mock_sensors_api, page):
-    mock_sensors_api([sensor()])
-    calls = users_api(page, people())
-    open_dashboard("ADMIN")
-    page.get_by_test_id("pending-ann").get_by_test_id("reject").click()
-    expect(page.get_by_test_id("confirm-dialog").get_by_role("heading")).to_have_text("Reject ann?")
-    page.get_by_test_id("confirm-ok").click()
-    expect(page.get_by_test_id("toast")).to_have_text("Sign-up from ann rejected")
-    assert ("DELETE", "/users/ann", None) in calls
 
 
 def test_change_a_role(open_dashboard, mock_sensors_api, page):
@@ -252,7 +179,19 @@ def test_admin_adds_a_user_with_email(open_dashboard, mock_sensors_api, page):
     page.get_by_test_id("user-new-name").fill("ivan")
     page.get_by_test_id("user-new-email").fill("ivan@example.com")
     page.get_by_test_id("user-new-password").fill("long-enough-1")
+    page.get_by_test_id("user-new-role").select_option("OPERATOR")
     page.get_by_test_id("user-create").click()
     expect(page.get_by_test_id("user-row-ivan")).to_contain_text("ivan@example.com")
-    assert ("POST", "/users", {"username": "ivan", "password": "long-enough-1", "role": "VIEWER",
+    expect(page.get_by_test_id("toast")).to_have_text("User ivan created as OPERATOR")
+    assert ("POST", "/users", {"username": "ivan", "password": "long-enough-1", "role": "OPERATOR",
                                "email": "ivan@example.com"}) in calls
+
+
+def test_admin_deletes_a_user_after_confirming(open_dashboard, mock_sensors_api, page):
+    mock_sensors_api([sensor()])
+    calls = users_api(page, people())
+    open_dashboard("ADMIN")
+    page.get_by_test_id("user-row-olga").get_by_test_id("user-delete").click()
+    page.get_by_test_id("confirm-ok").click()
+    expect(page.get_by_test_id("user-row-olga")).to_have_count(0)
+    assert ("DELETE", "/users/olga", None) in calls

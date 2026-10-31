@@ -1,12 +1,12 @@
 # Final QA Report
 
-SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (2026-10-30). Everything is fictional and simulated. All results below were produced in Docker on one Apple-silicon Mac, and CI re-runs them on Linux for every push.
+SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (2026-10-30). Sensors are simulated in software. All results below were produced in Docker on one Apple-silicon Mac, and CI re-runs them on Linux for every push.
 
 ## Summary
 
 | | |
 |---|---|
-| Automated tests | **823**, in 7 layers, all passing ([inventory](#test-inventory)) |
+| Automated tests | **813**, in 7 layers, all passing ([inventory](#test-inventory)) |
 | Requirements | **11 of 11** functional requirements implemented and covered by tests ([traceability](#requirements-traceability)) |
 | Defects found and fixed | **41** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
 | Reliability | 0 readings lost, 0 stored twice, through MySQL, broker and receiver outages ([reliability.md](reliability.md)) |
@@ -20,11 +20,11 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 | Layer | Tests | What it proves | Needs |
 |---|---|---|---|
 | unit | 333 | Parser, validator (every boundary ±0.01), generator, alert rules, batch writer (outage hold, acks), passwords and tokens, FOTA device logic, command parsing, fault injector, rate limiter, middleware, AI QA assistant, certificates and HTTPS downloads, production check | nothing |
-| api | 294 | Every endpoint: success, boundaries, 401/403 by role, 404/409/413/422/429/503, hostile input, headers, firmware tokens | MySQL |
+| api | 288 | Every endpoint: success, boundaries, 401/403 by role, 404/409/413/422/429/503, hostile input, headers, firmware tokens | MySQL |
 | mqtt | 28 | Broker round trip, wildcards, ordering, **ACLs per account**, **TLS listener** (certificate, host name, TLS 1.1 refused) | broker |
 | integration | 56 | Real receiver process: storage, rejection, alerts, offline detection, batching, commands, firmware progress, status messages | broker + MySQL |
 | reliability | 4 | MySQL outage, broker outage, receiver SIGKILL, faulty sensors, via TCP proxies | broker + MySQL |
-| ui | 94 | Every dashboard state in Chromium, API mocked: sign-in, tables, alerts, details, commands, firmware, XSS, phone width | Node |
+| ui | 90 | Every dashboard state in Chromium, API mocked: sign-in, tables, alerts, details, commands, firmware, XSS, phone width | Node |
 | e2e | 14 | Whole stack with the **real simulator**: reading → dashboard, commands, FOTA success and three injected failures, low battery | everything |
 
 One command runs all of them: `docker compose -f compose.test.yaml run --rm --build tests` (about 3½ minutes). Load tests (k6) and the 100-sensor scale check run separately, see [performance.md](performance.md).
@@ -33,7 +33,7 @@ One command runs all of them: `docker compose -f compose.test.yaml run --rm --bu
 
 | Requirement ([requirements.md](../requirements/requirements.md)) | Delivered in | Evidence |
 |---|---|---|
-| Simulate realistic fictional sensors | Phases 3, 14 | `unit/test_data_generator.py`, `unit/test_fleet.py`; scale check 100 sensors |
+| Simulate realistic sensors | Phases 3, 14 | `unit/test_data_generator.py`, `unit/test_fleet.py`; scale check 100 sensors |
 | Publish telemetry over MQTT per sensor | 3, 15f (QoS 1, buffering) | `mqtt/`, `reliability/` broker outage |
 | Receive, parse, validate; reject and log bad input | 6, 7 | `unit/test_message_parser.py`, `unit/test_telemetry_validator.py`, `integration/test_receive_chain.py` |
 | Persist telemetry, status, alerts in MySQL | 8, 9, 15a | `integration/`, `api/test_sensors.py`, `api/test_alerts.py` |
@@ -92,8 +92,8 @@ Every defect below was found by a test, a manual check or a measurement while bu
 | 37 | 18 | Sidebar highlight could never reach the last sections on a short page | review | bottom-of-page rule; `test_sidebar_marks_the_section_on_screen` |
 | 38 | 18 | Two new tests could pass or fail for the wrong reason (request timing; a user name the form itself rejects) | review before the first run | wait for the request; valid name |
 | 39 | 18 | Three firmware UI tests failed only in the full run: the new users screen asked a real API (left running by the e2e tests) with a fake token, got `401`, and the dashboard rightly signed out | full-suite run | every UI test fakes `/api/users` by default, like alerts and firmware |
-| 40 | 19 | The password strength bar called any 8+ character password without variety "Too short", though the API accepts it | writing the UI test | 8+ starts at Fair; `test_password_strength_and_show_toggle` |
-| 41 | 19 | Users form: "Email (optional)" wrapped and misaligned the row; the selected sign-in tab barely showed in dark mode | screenshot review | shorter label; accent tab with border |
+| 40 | 19 | The password strength bar called any 8+ character password without variety "Too short", though the API accepts it | writing the UI test | 8+ starts at Fair; `test_new_password_strength` |
+| 41 | 19 | Users form: "Email (optional)" wrapped and misaligned the row | screenshot review | shorter label |
 
 ## Known limits
 
@@ -107,10 +107,9 @@ Every defect below was found by a test, a manual check or a measurement while bu
 
 | Check | Result |
 |---|---|
-| **Phase 19 (2026-10-31): full suite** | **823 / 823 passed** (4 min 54 s) |
-| **Phase 19: live account flow** (real stack, HTTPS, Mailpit) | sign-up `201` → pending sign-in `403` → approved as OPERATOR → sign-in `200` → forgot `202` → email with username and link → reset `200` → old password `401`, new `200` → link reused `400`; token in API logs: 0 |
+| **Phase 19 (2026-10-31): full suite** | **813 / 813 passed** (4 min 45 s) |
 | **Phase 19: upgrade of the existing dev database** | migration applied on `init-db`, all existing accounts ACTIVE, admin sign-in unchanged |
-| **Phase 19: mutation check** | Letting pending accounts sign in, or keeping sessions after a reset, failed the matching tests |
+| **Phase 19: mutation check** | Letting a switched-off account sign in, or keeping sessions after a reset, failed the matching tests |
 | **Phase 18 (2026-10-31): full suite** | **762 / 762 passed** (4 min 30 s), after the full run caught defect #39 |
 | **Phase 18: mutation check** | Removing the `204` fix and the restart confirmation failed `test_delete_user_after_confirmation` and `test_restart_asks_first_and_cancel_sends_nothing` |
 | **Phase 18: browser review** | Light, dark and phone screenshots: no console errors or CSP violations, no sideways scroll at 390 px |
@@ -128,7 +127,7 @@ The first `docker compose up` of the fresh install failed instantly once, with i
 
 ```bash
 docker compose up -d --build                                    # the platform, https://localhost:8443 (admin / admin-dev-password)
-docker compose -f compose.test.yaml run --rm --build tests       # all 823 tests
+docker compose -f compose.test.yaml run --rm --build tests       # all 813 tests
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js
 docker compose -f compose.test.yaml run --rm tests python scripts/scale_check.py --sensors 100 --interval 1 --duration 30
 ```
