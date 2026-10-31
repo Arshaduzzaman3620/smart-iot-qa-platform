@@ -115,8 +115,32 @@ export function fetchUsers(signal?: AbortSignal): Promise<User[]> {
   return request<User[]>("/users", { signal });
 }
 
-export function createUser(username: string, password: string, role: Role): Promise<User> {
-  return request<User>("/users", { method: "POST", body: JSON.stringify({ username, password, role }) });
+export function createUser(username: string, password: string, role: Role, email?: string): Promise<User> {
+  return request<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(email ? { username, password, role, email } : { username, password, role }),
+  });
+}
+
+/** Approve a sign-up and/or change the role (Phase 19). */
+export function updateUser(username: string, changes: { role?: Role; status?: "ACTIVE" }): Promise<User> {
+  return request<User>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify(changes) });
+}
+
+// ---- accounts without signing in (Phase 19) ----
+
+interface Message { detail: string }
+
+export function register(username: string, email: string, password: string): Promise<Message> {
+  return request<Message>("/auth/register", { method: "POST", body: JSON.stringify({ username, email, password }) });
+}
+
+export function forgotPassword(email: string): Promise<Message> {
+  return request<Message>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function resetPassword(token: string, password: string): Promise<Message> {
+  return request<Message>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) });
 }
 
 export function deleteUser(username: string): Promise<void> {

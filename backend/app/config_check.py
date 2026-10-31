@@ -23,4 +23,8 @@ def production_problems(env) -> list[str]:
         problems.append("MQTT_TLS_CA is not set: the API would talk to the broker unencrypted")
     if not env.get("MYSQL_SSL_CA"):
         problems.append("MYSQL_SSL_CA is not set: the API would talk to MySQL unencrypted")
+    if not env.get("SMTP_HOST"):
+        problems.append("SMTP_HOST is not set: password reset emails could not be sent")
+    if not env.get("APP_BASE_URL", "").startswith("https://"):
+        problems.append("APP_BASE_URL must be the dashboard's https:// address: links in emails point there")
     return problems

@@ -309,7 +309,7 @@ def test_admin_lists_users_and_cannot_delete_self(open_dashboard, mock_sensors_a
     fake_users_api(page, admin_users())
     open_dashboard("ADMIN")
     expect(page.get_by_test_id("users-table").locator("tbody tr")).to_have_count(2)
-    expect(page.get_by_test_id("user-row-olga").get_by_test_id("user-role-cell")).to_have_text("OPERATOR")
+    expect(page.get_by_test_id("user-row-olga").get_by_test_id("user-role-cell")).to_have_value("OPERATOR")
     expect(page.get_by_test_id("user-row-ui-tester").get_by_test_id("user-delete")).to_have_count(0)
     expect(page.get_by_test_id("user-row-olga").get_by_test_id("user-delete")).to_be_visible()
 

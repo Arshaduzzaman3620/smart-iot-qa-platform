@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from database.models import User
 
 from ..deps import get_db, require_role
-from ..schemas import UserCreateIn, UserOut
+from .. import mailer
+from ..schemas import UserCreateIn, UserOut, UserUpdateIn
 from ..security import hash_password
 
 logger = logging.getLogger("backend.users")
@@ -22,14 +23,38 @@ def list_users(db: Session = Depends(get_db)):
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreateIn, db: Session = Depends(get_db), admin: User = Depends(require_role("ADMIN"))):
-    user = User(username=body.username, password_hash=hash_password(body.password), role=body.role)
+    user = User(username=body.username, email=body.email, password_hash=hash_password(body.password), role=body.role)
     db.add(user)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"User {body.username} already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"User {body.username} or that email already exists")
     logger.info("User %s created with role %s by %s", user.username, user.role, admin.username)
+    return user
+
+
+@router.patch("/{username}", response_model=UserOut)
+def update_user(username: str, body: UserUpdateIn, tasks: BackgroundTasks, db: Session = Depends(get_db),
+                admin: User = Depends(require_role("ADMIN"))):
+    """Approve a sign-up (status ACTIVE) and/or change the role (Phase 19)."""
+    if username == admin.username:
+        # Same reason as for DELETE: an admin must not lock themselves out.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="You cannot change your own account")
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"User {username} not found")
+    approved = body.status == "ACTIVE" and user.status != "ACTIVE"
+    if body.role is not None:
+        user.role = body.role
+    if body.status is not None:
+        user.status = body.status
+    db.commit()
+    logger.info("User %s updated by %s: role %s, status %s", username, admin.username, user.role, user.status)
+    if approved and user.email:
+        tasks.add_task(mailer.send_email, user.email, "Your SmartIoT account is ready",
+                       f"Hello {user.username},\n\nAn administrator approved your account as {user.role}. "
+                       f"Sign in at {mailer.app_url()}/\n")
     return user
 
 

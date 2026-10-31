@@ -29,6 +29,7 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 - [x] **Phase 17** — Real-world TLS: HTTPS, MQTT over TLS, MySQL TLS, production configuration check
 - [x] **Phase 18** — Dashboard experience: smart-home redesign, motion, search / filter / sort, rooms view, users screen, confirmations, toasts, theme, bookmarkable sensors
+- [x] **Phase 19** — Accounts: self sign-up with admin approval, email, forgot username / password with reset links; animated sign-in page
 
 ## Definition of Done (per phase)
 
@@ -52,6 +53,14 @@ This project is built **one phase at a time**. A phase is not started until the 
 6. Check this file's roadmap box, move to the next phase.
 
 ## Current status
+
+**Phase 19 complete: accounts** ([docs/api/auth.md](docs/api/auth.md#accounts-sign-up-approval-recovery-phase-19)).
+- **Create account** on the sign-in page: username, email, password; the account waits for an admin's approval (PENDING VIEWER, no self-chosen role).
+- **Users** screen: sign-ups waiting for approval with Approve as <role> / Reject, emails on every account, role changes in place.
+- **Forgot username or password?** emails the username and a one-time reset link (30 min, stored hashed, ends every session, owner notified). No answer or timing reveals whether an address exists. Mailpit is the local inbox (http://localhost:8025).
+- **Sign-in page** redesigned with motion: colour mesh, a house that draws itself with lit windows and signal ripples, floating glass widgets, tabbed card, password show / hide, Caps Lock warning, strength bar, spinners and success states.
+- Existing databases are upgraded in place (`database/migrations.py`). Production mode now also requires `SMTP_HOST` and an `https://` `APP_BASE_URL`.
+- 61 new tests (823 total), live flow verified end to end on the real stack, defects #40–41.
 
 **Phase 18 complete: the dashboard as a modern smart-home app** ([docs/frontend/dashboard.md](docs/frontend/dashboard.md)).
 - Redesign: sidebar layout, home status banner, overview tiles, list and rooms views, device detail card with reading tiles and a trend chart, split-screen sign-in, light / dark / system theme.

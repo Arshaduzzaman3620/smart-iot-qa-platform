@@ -37,7 +37,23 @@ def _add_latest_reading_pointer(engine: Engine) -> bool:
     return True
 
 
-MIGRATIONS = [_add_latest_reading_pointer]
+def _add_user_accounts(engine: Engine) -> bool:
+    """Phase 19: users.email / status / password_changed_at (sign-up, approval, password reset)."""
+    columns = {c["name"] for c in inspect(engine).get_columns("users")}
+    if "email" in columns:
+        return False
+    with engine.begin() as conn:
+        # Existing accounts stay usable: ACTIVE, no email (an admin or the user can add one later).
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN email VARCHAR(254) NULL, "
+            "ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'ACTIVE', "
+            "ADD COLUMN password_changed_at DATETIME NULL, "
+            "ADD UNIQUE INDEX uq_users_email (email)"
+        ))
+    return True
+
+
+MIGRATIONS = [_add_latest_reading_pointer, _add_user_accounts]
 
 
 def upgrade(engine: Engine) -> list[str]:

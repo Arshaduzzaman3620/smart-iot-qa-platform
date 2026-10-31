@@ -156,7 +156,8 @@ def test_mqtt_clients_use_tls_only_when_given_a_ca(certs):
 # ---- production check ------------------------------------------------------------------------------
 
 PRODUCTION = {"JWT_SECRET": "x" * 32, "ADMIN_PASSWORD": "a-real-one", "MYSQL_PASSWORD": "another",
-              "API_MQTT_PASSWORD": "third", "MQTT_TLS_CA": "/certs/ca.crt", "MYSQL_SSL_CA": "/certs/ca.crt"}
+              "API_MQTT_PASSWORD": "third", "MQTT_TLS_CA": "/certs/ca.crt", "MYSQL_SSL_CA": "/certs/ca.crt",
+              "SMTP_HOST": "mail.example.com", "APP_BASE_URL": "https://iot.example.com"}
 
 
 def test_a_complete_production_configuration_passes():
@@ -171,6 +172,8 @@ def test_a_complete_production_configuration_passes():
     ({"API_MQTT_PASSWORD": "api-dev-password"}, "API_MQTT_PASSWORD"),
     ({"MQTT_TLS_CA": ""}, "MQTT_TLS_CA"),
     ({"MYSQL_SSL_CA": ""}, "MYSQL_SSL_CA"),
+    ({"SMTP_HOST": ""}, "SMTP_HOST"),
+    ({"APP_BASE_URL": "http://iot.example.com"}, "APP_BASE_URL"),
 ])
 def test_each_development_setting_is_reported(change, problem):
     (found,) = production_problems({**PRODUCTION, **change})

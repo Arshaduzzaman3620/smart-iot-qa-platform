@@ -8,7 +8,7 @@ A fully simulated, fictional IoT sensor platform built to learn and demonstrate 
 
 Virtual sensors send fictional telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
 
-**Results:** 762 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 39 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
+**Results:** 823 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
 
 ## Quick start
 
@@ -17,10 +17,11 @@ The only requirement is [Docker Desktop](https://www.docker.com/products/docker-
 ```bash
 docker compose up -d --build                                  # the whole platform, with 5 simulated sensors
 # dashboard: https://localhost:8443  (sign in: admin / admin-dev-password)
+# emails:    http://localhost:8025     (Mailpit: password resets, approvals)
 # API docs:  https://localhost:8443/api/docs
 # First time: trust certs/ca.crt, or the browser warns (docs/security/tls.md)
 
-docker compose -f compose.test.yaml run --rm --build tests     # all 762 tests (~4 min)
+docker compose -f compose.test.yaml run --rm --build tests     # all 823 tests (~5 min)
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
 docker compose down                                           # stop
 ```
@@ -34,6 +35,7 @@ Running services with Python and Node on the host instead, plus troubleshooting:
 | Telemetry pipeline | Sensors → MQTT → receiver (parse, validate, store in batches) → MySQL → API → dashboard | [architecture](docs/architecture/architecture.md), [database](docs/architecture/database.md) |
 | Alerts | Threshold alerts (battery, temperature, humidity) with escalation and hysteresis; offline detection | [alerts](docs/architecture/alerts.md) |
 | Access control | JWT sign-in, VIEWER / OPERATOR / ADMIN, user management, login rate limiting | [auth](docs/api/auth.md) |
+| Accounts | Self sign-up with admin approval, email on every account, forgot username / password by email with one-time reset links, sessions end on reset (Mailpit as local inbox) | [accounts](docs/api/auth.md#accounts-sign-up-approval-recovery-phase-19) |
 | Commands | Restart, request a reading, change the interval, with each outcome tracked | [commands](docs/architecture/commands.md) |
 | Firmware over the air | Upload, scoped download tokens, verified install and reboot, injectable failures | [FOTA](docs/architecture/fota.md) |
 | Reliability | At-least-once with deduplication through MySQL, broker and receiver failures | [reliability](docs/testing/reliability.md) |
@@ -76,7 +78,7 @@ RECEIVER: parse -> validate -> batch writer -> MySQL -------+
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **all phases are complete** (0–18). A one-page summary for presenting the project: [docs/project-brief.md](docs/project-brief.md). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the history and the [final QA report](docs/testing/final-report.md) for the results.
+Currently: **all phases are complete** (0–19). A one-page summary for presenting the project: [docs/project-brief.md](docs/project-brief.md). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the history and the [final QA report](docs/testing/final-report.md) for the results.
 
 ## Documentation
 
