@@ -7,6 +7,8 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# TLS (docs/security/tls.md): our CA's certificate, or "system". Empty = plain MQTT (local port 1883).
+MQTT_TLS_CA = os.getenv("MQTT_TLS_CA", "")
 # Broker account for devices (docker/mosquitto/acl). Default = the Compose dev password.
 MQTT_USERNAME = "sensor"
 MQTT_PASSWORD = os.getenv("SENSOR_MQTT_PASSWORD", "sensor-dev-password")
@@ -21,6 +23,8 @@ RESTART_SECONDS = float(os.getenv("RESTART_SECONDS", "3"))
 
 # Firmware over the air (docs/architecture/fota.md).
 API_BASE_URL = os.getenv("API_BASE_URL", f"http://127.0.0.1:{os.getenv('API_PORT', '8000')}")
+# CA that signs the HTTPS certificate of API_BASE_URL. Empty = the OS's trusted CAs.
+API_CA_FILE = os.getenv("API_CA_FILE", "")
 # Inject a failure into every update: none, download, corrupt (checksum mismatch), install (rolls back).
 FOTA_FAILURE = os.getenv("FOTA_FAILURE", "none")
 # Below this battery level a sensor refuses to update, like real devices do.

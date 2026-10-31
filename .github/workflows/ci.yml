@@ -31,14 +31,20 @@ jobs:
       - name: Start the platform
         run: docker compose up -d --build --wait
 
-      # The API needs a sign-in since Phase 15c: log in as the initial admin (compose.yaml defaults).
-      - name: Telemetry reaches the API and the dashboard proxy
+      # Phase 17: HTTPS only, verified against the CA the certs service wrote to ./certs.
+      - name: Plain HTTP redirects, plain MySQL is refused
         run: |
-          token=$(curl -sf -X POST http://localhost:8080/api/auth/login -H 'Content-Type: application/json' \
+          test "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:8080/)" = "301 https://localhost:8443/"
+          ! docker compose exec -T mysql sh -c 'mysql -h 127.0.0.1 -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --ssl-mode=DISABLED -e "SELECT 1"'
+
+      # The API needs a sign-in since Phase 15c: log in as the initial admin (compose.yaml defaults).
+      - name: Telemetry reaches the API and the dashboard proxy over HTTPS
+        run: |
+          token=$(curl -sf --cacert certs/ca.crt -X POST https://localhost:8443/api/auth/login -H 'Content-Type: application/json' \
                     -d '{"username":"admin","password":"admin-dev-password"}' \
                   | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
           for i in $(seq 1 30); do
-            count=$(curl -sf -H "Authorization: Bearer $token" http://localhost:8080/api/sensors \
+            count=$(curl -sf --cacert certs/ca.crt -H "Authorization: Bearer $token" https://localhost:8443/api/sensors \
                     | python3 -c 'import json,sys; print(sum(1 for s in json.load(sys.stdin) if s["latest_telemetry"]))' 2>/dev/null || echo 0)
             [ "$count" -ge 1 ] && { echo "$count sensors reporting"; exit 0; }
             sleep 2

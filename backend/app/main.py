@@ -17,6 +17,7 @@ from database.session import SessionLocal
 from . import mqtt_publisher
 from .api import alerts, auth, commands, firmware, health, sensors, users
 from .bootstrap import ensure_admin
+from .config_check import production_problems
 from .security import JWT_SECRET, JWT_SECRET_CONFIGURED
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -25,6 +26,12 @@ logger = logging.getLogger("backend")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.getenv("APP_ENV") == "production":
+        problems = production_problems(os.environ)
+        for problem in problems:
+            logger.error("Not a production configuration: %s", problem)
+        if problems:
+            raise RuntimeError("APP_ENV=production with development settings, see the errors above")
     if not JWT_SECRET_CONFIGURED:
         logger.warning("JWT_SECRET not set: using a random secret, tokens are invalidated when the API restarts")
     elif len(JWT_SECRET.encode()) < 32:

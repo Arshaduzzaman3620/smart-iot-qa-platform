@@ -17,12 +17,14 @@ What protects each part of the platform, and the tests that prove it. Everything
 | A sensor impersonating another | The receiver rejects telemetry whose `sensor_id` doesn't match its topic, and applies command or firmware responses only to that sensor's own requests. (All devices share one broker account, so the broker can't tell them apart: per-device accounts would be the next step.) | `receiver/main.py` | integration tests |
 | Malicious or malformed messages | The receiver parses and validates everything (types, ranges, lengths that match the DB columns) before storing | receiver validators | unit + integration tests |
 | SQL injection | Only parameterised SQLAlchemy queries, no string-built SQL | everywhere | `test_api_security.py` (hostile path, query and body values) |
-| Stored XSS | React renders text, never HTML. A strict Content-Security-Policy on the dashboard blocks inline and foreign scripts even if markup got through. | `docker/nginx.conf` | UI tests (`<img onerror>` in a name stays inert), browser check (no CSP violations) |
+| Stored XSS | React renders text, never HTML. A strict Content-Security-Policy on the dashboard blocks inline and foreign scripts even if markup got through. | `docker/nginx.conf.template` | UI tests (`<img onerror>` in a name stays inert), browser check (no CSP violations) |
 | Clickjacking, MIME sniffing, referrer leaks | `X-Frame-Options: DENY` / `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` on the API and dashboard. API responses also get `Cache-Control: no-store` and `default-src 'none'`. | `main.py`, `nginx.conf` | `test_api_security.py` |
 | Other websites calling the API from a browser | No CORS headers: the dashboard is same-origin | `main.py` | `test_api_security.py` |
 | Oversized uploads | Firmware is capped at 1 MiB while the stream is read; nginx `client_max_body_size 2m` | `api/firmware.py` | `test_firmware.py` |
 | Leaking internals | Database errors become a bare `503`. No stack traces in responses, no `Server` version from nginx. | `main.py`, `nginx.conf` | `test_health.py`, `test_api_security.py` |
 | Vulnerable dependencies | Exact version pins. CI runs `pip-audit` (Python) and `npm audit --omit=dev` (dashboard) on every push. | `.github/workflows/ci.yml` | CI |
+| **Eavesdropping, man in the middle** | TLS on every connection that leaves a container: HTTPS, MQTT 8883, MySQL with `require_secure_transport`. Clients check the certificate and host name. Plain ports only on 127.0.0.1. | [tls.md](tls.md) | `test_tls.py`, `test_broker_tls.py`, CI full-stack job |
+| Production with dev settings | `APP_ENV=production` refuses to start with dev passwords, a weak `JWT_SECRET` or without TLS | `backend/app/config_check.py` | `test_tls.py` |
 | Secrets in git | `.env` is git-ignored. Passwords and `JWT_SECRET` come only from the environment, and logs never contain them. | | review |
 
 ## Broker accounts
@@ -45,7 +47,7 @@ With MQTT 3.1.1, a denied publish or subscribe is dropped silently (the client i
 
 ## Known limits
 
-- **No TLS.** MQTT (1883) and HTTP (8000, 8080) are plain text. That's fine on one machine. Anywhere else, put TLS in front: Mosquitto `listener 8883` with certificates, and HTTPS in nginx, then send `Strict-Transport-Security`.
+- **TLS since Phase 17** ([tls.md](tls.md)). Its own limits: one server certificate for all servers, devices sign in with a password rather than a client certificate, and nginx → API is plain HTTP inside the Docker network.
 - **One shared device account.** The broker can't stop one sensor publishing on another's topic. The receiver's topic and `sensor_id` checks catch a mismatch inside the payload, but not a device using another's topic and ID together. The fix is per-device credentials (client certificates, or Mosquitto's dynamic security plugin) with `%u` patterns in the ACL.
 - **In-memory login limiter.** Right for one API instance. Several instances would need a shared store, and an API restart resets the counts.
 - **Tokens can't be revoked individually** before they expire, except by deleting the user or changing `JWT_SECRET`.

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import ssl
 import uuid
 
 import paho.mqtt.client as mqtt
@@ -11,13 +12,24 @@ logger = logging.getLogger("backend.mqtt")
 PUBLISH_TIMEOUT = 3  # seconds to wait for the broker's PUBACK
 
 
+def tls_context(ca_file: str) -> ssl.SSLContext:
+    """Verify the broker's certificate and host name (TLS 1.2+). "system" = the OS's trusted CAs,
+    for a broker with a certificate from a public CA; otherwise the path of our CA (docs/security/tls.md)."""
+    context = ssl.create_default_context(cafile=None if ca_file == "system" else ca_file)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 class CommandPublisher:
-    def __init__(self, host: str, port: int, username: str | None = None, password: str | None = None):
+    def __init__(self, host: str, port: int, username: str | None = None, password: str | None = None,
+                 tls_ca: str | None = None):
         # Unique client ID: two API instances with the same ID would keep kicking each other off.
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"api-{uuid.uuid4().hex[:8]}")
         if username:
             # Broker account that may only send commands and firmware (docker/mosquitto/acl).
             self._client.username_pw_set(username, password)
+        if tls_ca:
+            self._client.tls_set_context(tls_context(tls_ca))
         self._client.on_connect = lambda c, u, f, rc, p: logger.info("Connected to MQTT broker %s:%s (%s)", host, port, rc)
         self._client.on_disconnect = lambda c, u, f, rc, p: logger.warning("Disconnected from MQTT broker (%s)", rc)
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)
@@ -47,4 +59,5 @@ class CommandPublisher:
 
 def from_env() -> CommandPublisher:
     return CommandPublisher(os.getenv("MQTT_HOST", "127.0.0.1"), int(os.getenv("MQTT_PORT", "1883")),
-                            "api", os.getenv("API_MQTT_PASSWORD", "api-dev-password"))
+                            "api", os.getenv("API_MQTT_PASSWORD", "api-dev-password"),
+                            tls_ca=os.getenv("MQTT_TLS_CA") or None)

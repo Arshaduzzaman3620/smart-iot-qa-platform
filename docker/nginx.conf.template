@@ -1,7 +1,29 @@
+# The dashboard and the API behind it, over HTTPS (Phase 17, docs/security/tls.md).
+# A template: at start nginx's image fills in ${HTTPS_PORT} and ${HSTS_MAX_AGE} from the environment
+# (only variables that are set; nginx's own $variables are left alone).
+
+# Plain HTTP only sends browsers to HTTPS.
 server {
     listen 80;
+    server_tokens off;
+    location / {
+        return 301 https://$host:${HTTPS_PORT}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
     root /usr/share/nginx/html;
     server_tokens off;  # no nginx version in headers or error pages
+
+    # From the `certs` service (./certs), or real certificates put there instead.
+    ssl_certificate /certs/server.crt;
+    ssl_certificate_key /certs/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
 
     # Firmware uploads go through here; the API's own limit is 1 MiB.
     client_max_body_size 2m;
@@ -13,6 +35,9 @@ server {
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "no-referrer" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    # HSTS: browsers then refuse plain HTTP for this host name, on every port, for max-age seconds.
+    # 0 by default because the host here is localhost; set HSTS_MAX_AGE=31536000 on a real domain.
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}" always;
 
     # Docker's DNS. Resolving "api" per request (through a variable) means nginx starts even
     # while the API is still starting, and follows it if the API container is recreated.
@@ -26,6 +51,7 @@ server {
         proxy_set_header Host $host;
         # The caller's address, for login rate limiting (the API trusts it only with TRUST_PROXY=1).
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
     }
 
     location / {

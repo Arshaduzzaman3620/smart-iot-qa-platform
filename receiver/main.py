@@ -70,7 +70,8 @@ def log_failed(data: dict, exc: Exception):
 
 writer = BatchWriter(TelemetryRepository(), log_saved, log_failed, max_batch=settings.RECEIVER_BATCH_MAX)
 mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id=settings.RECEIVER_CLIENT_ID,
-                             username=settings.MQTT_USERNAME, password=settings.MQTT_PASSWORD)
+                             username=settings.MQTT_USERNAME, password=settings.MQTT_PASSWORD,
+                             tls_ca=settings.MQTT_TLS_CA or None)
 commands = CommandRepository()
 firmware = FirmwareRepository()
 

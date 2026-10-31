@@ -8,6 +8,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
+from functools import partial
 
 if sys.version_info < (3, 10):  # `X | None` annotations below fail on import otherwise
     raise SystemExit(f"Python 3.10+ is required (3.12 recommended), this is {sys.version.split()[0]}. "
@@ -16,7 +17,7 @@ if sys.version_info < (3, 10):  # `X | None` annotations below fail on import ot
 from commands.command_handler import CommandError, parse_command, response
 from config import settings
 from faults.fault_injector import FaultRates, apply_faults
-from fota.fota_client import FotaError, parse_update, run_update
+from fota.fota_client import FotaError, download, parse_update, run_update
 from generator.data_generator import DataGenerator
 from mqtt.mqtt_client import MQTTClient
 from sensors.environment_sensor import EnvironmentSensor
@@ -223,7 +224,8 @@ class CommandRunner:
         try:
             version = run_update(request, current_version, battery, report, base_url=settings.API_BASE_URL,
                                  failure=settings.FOTA_FAILURE, min_battery=settings.FOTA_MIN_BATTERY,
-                                 step_seconds=settings.FOTA_STEP_SECONDS)
+                                 step_seconds=settings.FOTA_STEP_SECONDS,
+                                 fetch=partial(download, ca_file=settings.API_CA_FILE or None))
         except FotaError as exc:
             report("FAILED", str(exc))
             run_on_main_thread(lambda: self.updating.discard(sensor_id))
@@ -282,7 +284,8 @@ def main():
     generator = DataGenerator()
     sensors = {s.sensor_id: s for s in fleet}
     clients = {s.sensor_id: MQTTClient(settings.MQTT_HOST, settings.MQTT_PORT, client_id=s.sensor_id,
-                                       username=settings.MQTT_USERNAME, password=settings.MQTT_PASSWORD)
+                                       username=settings.MQTT_USERNAME, password=settings.MQTT_PASSWORD,
+                                       tls_ca=settings.MQTT_TLS_CA or None)
                for s in fleet}
     for sensor in fleet:
         sensor.interval = settings.SENSOR_INTERVAL
