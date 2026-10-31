@@ -180,15 +180,18 @@ def test_critical_alerts_are_listed_first(open_dashboard, mock_sensors_api, mock
     expect(page.get_by_test_id("alerts-panel").locator("li").first).to_have_attribute("data-testid", "alert-1")
 
 
-def test_slow_response_is_not_cancelled_by_the_next_poll(open_dashboard, mock_alerts_api, page):
+def test_slow_response_is_not_cancelled_by_the_next_poll(open_dashboard, mock_alerts_api, mock_firmware_api, page):
     # An API slower than the 5 s refresh must still get its data on screen.
     page.clock.install()
     held = []
     page.route("**/api/sensors", lambda route: held.append(route))  # hold requests open, unanswered
     open_dashboard()
-    while not held:
+    # Dev StrictMode mounts twice: the first request is aborted on cleanup, the second is the live one.
+    # Wait for it rather than a fixed delay -- with more requests at startup, 300 ms wasn't always enough.
+    for _ in range(100):
+        if len(held) >= 2:
+            break
         page.wait_for_timeout(50)
-    page.wait_for_timeout(300)  # dev StrictMode mounts twice; the first request is aborted on cleanup
     pending = held[-1]
 
     page.clock.run_for(6000)  # the next poll comes due while that request is still pending

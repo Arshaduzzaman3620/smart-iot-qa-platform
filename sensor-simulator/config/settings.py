@@ -13,3 +13,12 @@ SENSOR_COUNT = int(os.getenv("SENSOR_COUNT", "1"))
 SENSOR_ID_PREFIX = os.getenv("SENSOR_ID_PREFIX", "SENSOR-")
 # How long a RESTART command keeps a sensor offline, like a device rebooting.
 RESTART_SECONDS = float(os.getenv("RESTART_SECONDS", "3"))
+
+# Firmware over the air (docs/architecture/fota.md).
+API_BASE_URL = os.getenv("API_BASE_URL", f"http://127.0.0.1:{os.getenv('API_PORT', '8000')}")
+# Inject a failure into every update: none, download, corrupt (checksum mismatch), install (rolls back).
+FOTA_FAILURE = os.getenv("FOTA_FAILURE", "none")
+# Below this battery level a sensor refuses to update, like real devices do.
+FOTA_MIN_BATTERY = float(os.getenv("FOTA_MIN_BATTERY", "20"))
+# Simulated time each stage takes, so progress is visible on the dashboard.
+FOTA_STEP_SECONDS = float(os.getenv("FOTA_STEP_SECONDS", "1"))

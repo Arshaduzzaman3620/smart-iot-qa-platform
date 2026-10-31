@@ -26,9 +26,9 @@ def receiver_process(broker_available, mysql_available, clean_test_rows, tmp_pat
         stdout=log_file,
         stderr=subprocess.STDOUT,
         # Check for silent sensors every second from the start; the 30 s timeout itself stays the default.
-        # Commands time out after 3 s instead of 30, so the timeout test is quick.
+        # Commands and firmware updates time out after 3 s instead of 30 / 300, so timeout tests are quick.
         env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "OFFLINE_CHECK_INTERVAL": "1", "OFFLINE_STARTUP_GRACE": "0",
-             "COMMAND_TIMEOUT": "3"},
+             "COMMAND_TIMEOUT": "3", "FOTA_TIMEOUT": "3"},
     )
 
     def log() -> str:

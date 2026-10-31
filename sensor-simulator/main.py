@@ -13,6 +13,7 @@ if sys.version_info < (3, 10):  # `X | None` annotations below fail on import ot
 
 from commands.command_handler import CommandError, parse_command, response
 from config import settings
+from fota.fota_client import FotaError, parse_update, run_update
 from generator.data_generator import DataGenerator
 from mqtt.mqtt_client import MQTTClient
 from sensors.environment_sensor import EnvironmentSensor
@@ -28,9 +29,14 @@ CONNECT_TIMEOUT = 5
 stop_requested = threading.Event()
 # Wakes the main loop early: a stop request or an incoming command.
 wakeup = threading.Event()
-# Commands arrive on paho's network threads; they are queued and run on the main thread, which owns
-# all sensor state, so no locking is needed.
-incoming_commands: queue.Queue = queue.Queue()
+# Work for the main thread, as callables: commands and firmware requests arriving on paho's network
+# threads, and finished firmware downloads. The main thread owns all sensor state, so no locking.
+main_thread_work: queue.Queue = queue.Queue()
+
+
+def run_on_main_thread(work):
+    main_thread_work.put(work)
+    wakeup.set()
 
 
 def request_stop(signum, frame):
@@ -95,12 +101,14 @@ def publish_reading(sensor: EnvironmentSensor, client: MQTTClient, generator: Da
 
 
 class CommandRunner:
-    """Carries out commands for the fleet (Phase 15d): REQUEST_TELEMETRY, SET_INTERVAL, RESTART."""
+    """Carries out commands (Phase 15d: REQUEST_TELEMETRY, SET_INTERVAL, RESTART) and firmware
+    updates (15e) for the fleet. Called on the main thread only."""
 
     def __init__(self, sensors: dict, clients: dict, generator: DataGenerator, next_due: dict):
         self.sensors, self.clients, self.generator, self.next_due = sensors, clients, generator, next_due
-        # sensor_id -> [command_id, monotonic time the "reboot" ends, reconnect started?]
+        # sensor_id -> [monotonic time the "reboot" ends, reconnect started?, what to do once back online]
         self.restarting: dict[str, list] = {}
+        self.updating: set[str] = set()  # sensors with a firmware update in progress
 
     def reply(self, sensor_id: str, command_id: int, ok: bool, message: str):
         self.clients[sensor_id].publish(topic(sensor_id, "response"), response(command_id, ok, message), qos=1)
@@ -127,10 +135,65 @@ class CommandRunner:
             self.next_due[sensor_id] = time.monotonic() + sensor.interval
             self.reply(sensor_id, command.command_id, True, f"Interval set to {sensor.interval} s")
         elif command.name == "RESTART":
-            # Like a device rebooting: drop off the network, come back after RESTART_SECONDS, then answer.
-            sensor.mark_offline()
-            client.disconnect()
-            self.restarting[sensor_id] = [command.command_id, time.monotonic() + settings.RESTART_SECONDS, False]
+            self.reboot(sensor_id, lambda: self.reply(sensor_id, command.command_id, True,
+                                                      f"Restarted ({settings.RESTART_SECONDS:g} s)"))
+
+    def reboot(self, sensor_id: str, when_back):
+        """Like a device rebooting: drop off the network, come back after RESTART_SECONDS, then `when_back()`."""
+        self.sensors[sensor_id].mark_offline()
+        self.clients[sensor_id].disconnect()
+        self.restarting[sensor_id] = [time.monotonic() + settings.RESTART_SECONDS, False, when_back]
+
+    # ---- firmware over the air (Phase 15e) ----
+
+    def fota_report(self, sensor_id: str, update_id: int, status: str, message: str):
+        payload = json.dumps({"update_id": update_id, "status": status, "message": message})
+        self.clients[sensor_id].publish(topic(sensor_id, "firmware_status"), payload, qos=1)
+        log = logger.warning if status == "FAILED" else logger.info
+        log("Firmware update %s on %s: %s %s", update_id, sensor_id, status, message)
+
+    def handle_firmware(self, sensor_id: str, payload: bytes):
+        if sensor_id in self.restarting:
+            return
+        try:
+            request = parse_update(payload)
+        except FotaError as exc:
+            logger.warning("Rejected firmware request for %s: %s", sensor_id, exc)
+            if exc.update_id is not None:
+                self.fota_report(sensor_id, exc.update_id, "FAILED", str(exc))
+            return
+        if sensor_id in self.updating:
+            self.fota_report(sensor_id, request.update_id, "FAILED", "another update is in progress")
+            return
+        sensor = self.sensors[sensor_id]
+        self.updating.add(sensor_id)
+        # Download and verify off the main thread, so the rest of the fleet keeps reading meanwhile.
+        threading.Thread(target=self._update_worker, name=f"fota-{sensor_id}", daemon=True,
+                         args=(sensor_id, request, sensor.firmware_version, sensor.battery)).start()
+
+    def _update_worker(self, sensor_id, request, current_version, battery):
+        def report(status, message):
+            self.fota_report(sensor_id, request.update_id, status, message)
+
+        try:
+            version = run_update(request, current_version, battery, report, base_url=settings.API_BASE_URL,
+                                 failure=settings.FOTA_FAILURE, min_battery=settings.FOTA_MIN_BATTERY,
+                                 step_seconds=settings.FOTA_STEP_SECONDS)
+        except FotaError as exc:
+            report("FAILED", str(exc))
+            run_on_main_thread(lambda: self.updating.discard(sensor_id))
+            return
+        run_on_main_thread(lambda: self._installed(sensor_id, request.update_id, current_version, version))
+
+    def _installed(self, sensor_id, update_id, old_version, version):
+        # The new firmware runs after a reboot; the retained status announced on reconnect carries it.
+        self.sensors[sensor_id].firmware_version = version
+
+        def back_online():
+            self.updating.discard(sensor_id)
+            self.fota_report(sensor_id, update_id, "SUCCEEDED", f"{old_version} -> {version}, rebooted")
+
+        self.reboot(sensor_id, back_online)
 
     def advance_restarts(self) -> float | None:
         """Reconnect sensors whose reboot is over; answer once connected. Returns seconds until the next check."""
@@ -138,18 +201,18 @@ class CommandRunner:
             return None
         now = time.monotonic()
         for sensor_id, state in list(self.restarting.items()):
-            command_id, until, reconnecting = state
+            until, reconnecting, when_back = state
             if now < until:
                 continue
             client = self.clients[sensor_id]
             if not reconnecting:
                 client.connect()
-                state[2] = True
+                state[1] = True
             elif client.is_connected():
                 del self.restarting[sensor_id]
                 self.sensors[sensor_id].mark_online()
                 self.next_due[sensor_id] = now  # first reading right after the reboot
-                self.reply(sensor_id, command_id, True, f"Restarted ({settings.RESTART_SECONDS:g} s)")
+                when_back()
         return 0.2 if self.restarting else None
 
 
@@ -173,11 +236,11 @@ def main():
         client.on_connected(lambda s=sensor, c=client: c.publish_nowait(
             topic(s.sensor_id, "status"), json.dumps(s.describe()), retain=True))
 
-        def queue_command(payload: bytes, sensor_id=sensor.sensor_id):
-            incoming_commands.put((sensor_id, payload))
-            wakeup.set()
-
-        client.subscribe(topic(sensor.sensor_id, "command"), queue_command)
+        sid = sensor.sensor_id
+        client.subscribe(topic(sid, "command"),
+                         lambda payload, sid=sid: run_on_main_thread(lambda: runner.handle(sid, payload)))
+        client.subscribe(topic(sid, "firmware"),
+                         lambda payload, sid=sid: run_on_main_thread(lambda: runner.handle_firmware(sid, payload)))
     connect_all(list(clients.values()))
     for sensor in fleet:
         sensor.mark_online()
@@ -190,8 +253,8 @@ def main():
 
     try:
         while not stop_requested.is_set():
-            while not incoming_commands.empty() and not stop_requested.is_set():
-                runner.handle(*incoming_commands.get_nowait())
+            while not main_thread_work.empty() and not stop_requested.is_set():
+                main_thread_work.get_nowait()()
             restart_check = runner.advance_restarts()
 
             for sensor in fleet:

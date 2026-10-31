@@ -173,3 +173,11 @@ form.inline input { width: 6em; }
 .badge-cmd-sent { background: var(--warning-bg); color: var(--warning); }
 .badge-cmd-succeeded { background: var(--online-bg); color: var(--online); }
 .badge-cmd-failed, .badge-cmd-timed_out { background: var(--error-bg); color: var(--error); }
+
+/* ---- Phase 15e: firmware ---- */
+select { font: inherit; padding: 8px 10px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.badge-fw-requested, .badge-fw-downloading, .badge-fw-verifying, .badge-fw-installing { background: var(--warning-bg); color: var(--warning); }
+.badge-fw-succeeded { background: var(--online-bg); color: var(--online); }
+.badge-fw-failed, .badge-fw-timed_out { background: var(--error-bg); color: var(--error); }
+main > .table-wrap { margin-bottom: 20px; }
+input[type="file"] { padding: 6px; }

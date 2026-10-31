@@ -38,8 +38,10 @@ def telemetry_rows(sensor_id, count):
              "received_at": f"2026-10-24T12:00:{59 - i:02d}Z"} for i in range(count)]
 
 
-def mock_details(page, sensor_id, readings=3, alerts=(), commands=()):
+def mock_details(page, sensor_id, readings=3, alerts=(), commands=(), updates=()):
     """Mock everything the details panel loads for `sensor_id`."""
+    page.route(f"**/api/sensors/{sensor_id}/firmware-updates*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(list(updates))))
     page.route(f"**/api/sensors/{sensor_id}/commands*", lambda route: route.fulfill(
         status=200, content_type="application/json", body=json.dumps(list(commands))))
     page.route(f"**/api/sensors/{sensor_id}/telemetry*", lambda route: route.fulfill(
