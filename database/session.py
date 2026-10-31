@@ -16,5 +16,8 @@ DATABASE_URL = URL.create(
 # Pool: up to 40 connections per process, matching the API's 40 worker threads, so a running request
 # never waits for one (MySQL allows 151). If it ever does, 5 s at most: an overloaded API answers 503
 # quickly instead of piling requests up (docs/testing/performance.md).
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=30, pool_timeout=5)
+# PyMySQL with a CA: CERT_REQUIRED and host name checking.
+CONNECT_ARGS = {"ssl": {"ca": config.MYSQL_SSL_CA}} if config.MYSQL_SSL_CA else {}
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=30, pool_timeout=5,
+                       connect_args=CONNECT_ARGS)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

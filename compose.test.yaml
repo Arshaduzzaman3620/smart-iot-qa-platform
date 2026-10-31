@@ -8,6 +8,17 @@
 name: smart-iot-test
 
 services:
+  # Test certificates in a throwaway volume (the dev stack's ./certs stays untouched).
+  certs:
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: tests
+    image: smart-iot/tests:local
+    command: ["python", "docker/tls/make_certs.py", "/certs"]
+    volumes:
+      - certs:/certs
+
   mqtt:
     image: eclipse-mosquitto:2
     entrypoint: ["/bin/sh", "/mosquitto/config/entrypoint.sh"]
@@ -18,6 +29,10 @@ services:
       QA_MQTT_PASSWORD: qa-test
     volumes:
       - ./docker/mosquitto:/mosquitto/config:ro
+      - certs:/certs:ro
+    depends_on:
+      certs:
+        condition: service_completed_successfully
 
   mysql:
     image: mysql:8.4
@@ -55,6 +70,10 @@ services:
       RECEIVER_MQTT_PASSWORD: receiver-test
       API_MQTT_PASSWORD: api-test
       QA_MQTT_PASSWORD: qa-test
+      # TLS tests (tests/mqtt/test_tls.py): the broker's TLS listener and the CA that signed it.
+      # Everything else uses plain 1883 here, to keep the suite fast and the proxies simple.
+      MQTT_TLS_PORT: "8883"
+      TLS_CA_FILE: /certs/ca.crt
       # Only for running the AI QA assistant in this container (the tests never call the API).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # A missing service is a failure here, not a skip.
@@ -63,8 +82,13 @@ services:
     # Create the schema, then run whatever command was given (default: pytest).
     entrypoint: ["sh", "-c", "python -m database.init_db && exec \"$$@\"", "--"]
     command: ["pytest"]
+    volumes:
+      - certs:/certs:ro
     depends_on:
       mqtt:
         condition: service_started
       mysql:
         condition: service_healthy
+
+volumes:
+  certs:

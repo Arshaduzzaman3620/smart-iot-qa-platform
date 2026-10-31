@@ -7,6 +7,8 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# TLS (docs/security/tls.md): our CA's certificate, or "system". Empty = plain MQTT (local port 1883).
+MQTT_TLS_CA = os.getenv("MQTT_TLS_CA", "")
 # The broker keeps a persistent session per client ID, so it must be stable and unique per receiver.
 RECEIVER_CLIENT_ID = os.getenv("RECEIVER_CLIENT_ID", "receiver")
 # Broker account (docker/mosquitto/acl): may only read what sensors send. Default = the Compose dev password.

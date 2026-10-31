@@ -1,4 +1,5 @@
 import logging
+import ssl
 import threading
 
 import paho.mqtt.client as mqtt
@@ -6,14 +7,24 @@ import paho.mqtt.client as mqtt
 logger = logging.getLogger("mqtt_client")
 
 
+def tls_context(ca_file: str) -> ssl.SSLContext:
+    """Verify the broker's certificate and host name (TLS 1.2+). "system" = the OS's trusted CAs,
+    for a broker with a certificate from a public CA; otherwise the path of our CA (docs/security/tls.md)."""
+    context = ssl.create_default_context(cafile=None if ca_file == "system" else ca_file)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 class MQTTClient:
     """Thin wrapper around paho-mqtt: connect, publish, subscribe, reconnect, log. No sensor logic here."""
 
     def __init__(self, host: str, port: int, client_id: str, username: str | None = None,
-                 password: str | None = None):
+                 password: str | None = None, tls_ca: str | None = None):
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
         if username:
             self._client.username_pw_set(username, password)
+        if tls_ca:
+            self._client.tls_set_context(tls_context(tls_ca))
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
