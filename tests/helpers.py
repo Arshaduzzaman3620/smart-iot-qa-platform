@@ -10,6 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 # Read after conftest has loaded the repo-root .env (database.config does that on import).
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# Broker passwords (docker/mosquitto/acl). Tests act as "qa", which may play any role; the ACL tests
+# sign in as the real accounts. Defaults are the Compose dev passwords.
+MQTT_PASSWORDS = {
+    "qa": os.getenv("QA_MQTT_PASSWORD", "qa-dev-password"),
+    "sensor": os.getenv("SENSOR_MQTT_PASSWORD", "sensor-dev-password"),
+    "receiver": os.getenv("RECEIVER_MQTT_PASSWORD", "receiver-dev-password"),
+    "api": os.getenv("API_MQTT_PASSWORD", "api-dev-password"),
+}
 TEST_PREFIX = "TEST-"
 TEST_USER_PREFIX = "test-"
 TEST_PASSWORD = "test-password-123"
@@ -56,3 +64,20 @@ def login_headers(api_url: str, username: str, password: str) -> dict:
     response = httpx.post(f"{api_url}/auth/login", json={"username": username, "password": password}, timeout=10)
     response.raise_for_status()
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def report(name: str, **metrics):
+    """One line of measurements per scenario, shown with `pytest -s` (used by the reliability tests)."""
+    print(f"\n[{name}] " + ", ".join(f"{k}={v}" for k, v in metrics.items()))
+
+
+def mqtt_client(client_id: str | None = None, username: str | None = "qa", password: str | None = None):
+    """A paho client signed in as `username` (default: the test-harness account), not yet connected."""
+    import uuid
+
+    import paho.mqtt.client as mqtt
+
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id or f"pytest-{uuid.uuid4().hex[:8]}")
+    if username:
+        client.username_pw_set(username, MQTT_PASSWORDS.get(username) if password is None else password)
+    return client

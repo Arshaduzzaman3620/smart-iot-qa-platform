@@ -30,6 +30,9 @@ def _to_utc_naive(timestamp: str) -> datetime:
 class SaveResult:
     telemetry_id: int
     alert_changes: list[AlertChange] = field(default_factory=list)
+    # True: an identical reading (same sensor, timestamp and values) was already stored, so nothing
+    # was written. QoS 1 means "at least once": a broker or sensor redelivery must not count twice.
+    duplicate: bool = False
 
 
 class TelemetryRepository:
@@ -55,6 +58,17 @@ class TelemetryRepository:
         """Upsert the sensor's state, append one telemetry row, advance the sensor's latest-reading
         pointer, and raise / escalate / resolve its alerts."""
         now = utc_now()
+        timestamp = _to_utc_naive(data["timestamp"])
+        # Uses ix_telemetry_sensor_timestamp; normally finds nothing. Within a batch, autoflush makes
+        # earlier messages of the same batch visible here too.
+        existing = session.scalar(
+            select(Telemetry.id).where(
+                Telemetry.sensor_id == data["sensor_id"], Telemetry.timestamp == timestamp,
+                *(getattr(Telemetry, f) == data[f] for f in ("temperature", "humidity", "pressure", "light", "battery")),
+            ).limit(1)
+        )
+        if existing is not None:
+            return SaveResult(existing, duplicate=True)
 
         # INSERT ... ON DUPLICATE KEY UPDATE: a first-seen sensor is registered automatically,
         # and concurrent receivers can't race each other into a duplicate-key error.
@@ -71,7 +85,7 @@ class TelemetryRepository:
 
         telemetry = Telemetry(
             sensor_id=data["sensor_id"],
-            timestamp=_to_utc_naive(data["timestamp"]),
+            timestamp=timestamp,
             temperature=data["temperature"],
             humidity=data["humidity"],
             pressure=data["pressure"],

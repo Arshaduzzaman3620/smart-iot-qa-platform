@@ -26,14 +26,27 @@ x-app-env: &app-env
   MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
   MQTT_HOST: mqtt
   MQTT_PORT: "1883"
+  # Each service signs in to the broker with its own account (docker/mosquitto/acl).
+  RECEIVER_MQTT_PASSWORD: ${RECEIVER_MQTT_PASSWORD:-receiver-dev-password}
+  API_MQTT_PASSWORD: ${API_MQTT_PASSWORD:-api-dev-password}
 
 services:
   mqtt:
     image: eclipse-mosquitto:2
+    # Builds the password file from these, then starts Mosquitto (docker/mosquitto/entrypoint.sh).
+    entrypoint: ["/bin/sh", "/mosquitto/config/entrypoint.sh"]
+    environment:
+      SENSOR_MQTT_PASSWORD: ${SENSOR_MQTT_PASSWORD:-sensor-dev-password}
+      RECEIVER_MQTT_PASSWORD: ${RECEIVER_MQTT_PASSWORD:-receiver-dev-password}
+      API_MQTT_PASSWORD: ${API_MQTT_PASSWORD:-api-dev-password}
+      # Test-harness account (runs pytest from the host against this broker). Empty = not created.
+      QA_MQTT_PASSWORD: ${QA_MQTT_PASSWORD:-qa-dev-password}
     ports:
       - "${MQTT_PORT:-1883}:1883"
     volumes:
-      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto:/mosquitto/config:ro
+      # Sessions and queued messages survive a broker restart (docs/testing/reliability.md).
+      - mqtt-data:/mosquitto/data
     restart: unless-stopped
 
   mysql:
@@ -106,6 +119,8 @@ services:
       # Empty = a random secret per API start (everyone signs in again after a restart).
       JWT_SECRET: ${JWT_SECRET:-}
       TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
+      # The dashboard's nginx passes the caller's address in X-Real-IP (login rate limiting).
+      TRUST_PROXY: "1"
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -124,12 +139,17 @@ services:
     environment:
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
+      SENSOR_MQTT_PASSWORD: ${SENSOR_MQTT_PASSWORD:-sensor-dev-password}
       SENSOR_COUNT: ${SENSOR_COUNT:-5}
       SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
       # Where sensors download firmware from (the URL path comes in the update message).
       API_BASE_URL: http://api:8000
       # Inject a FOTA failure on every update: none / download / corrupt / install (docs/architecture/fota.md)
       FOTA_FAILURE: ${FOTA_FAILURE:-none}
+      # Fault injection, probability per reading 0-1 (docs/testing/reliability.md)
+      FAULT_INVALID_RATE: ${FAULT_INVALID_RATE:-0}
+      FAULT_MALFORMED_RATE: ${FAULT_MALFORMED_RATE:-0}
+      FAULT_DUPLICATE_RATE: ${FAULT_DUPLICATE_RATE:-0}
     depends_on:
       - mqtt
       - receiver
@@ -145,5 +165,20 @@ services:
       - api
     restart: unless-stopped
 
+  # Load tests, only with --profile perf (docs/testing/performance.md):
+  #   docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: ["perf"]
+    volumes:
+      - ./perf/k6:/scripts:ro
+    environment:
+      API_URL: http://api:8000
+      API_USER: ${ADMIN_USERNAME:-admin}
+      API_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
+    depends_on:
+      - api
+
 volumes:
   mysql-data:
+  mqtt-data:

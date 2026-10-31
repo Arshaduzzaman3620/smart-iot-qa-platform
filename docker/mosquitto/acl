@@ -1,0 +1,27 @@
+# Who may publish / subscribe what (Phase 15g, docs/security/security.md).
+# "+/sensors" rather than "iot/sensors": reliability tests use their own topic root (rtest…/sensors).
+
+# Devices: send their own data; receive commands and firmware updates.
+user sensor
+topic write +/sensors/+/telemetry
+topic write +/sensors/+/response
+topic write +/sensors/+/status
+topic write +/sensors/+/firmware_status
+topic read +/sensors/+/command
+topic read +/sensors/+/firmware
+
+# Receiver: reads everything devices send. Publishes nothing.
+user receiver
+topic read +/sensors/+/telemetry
+topic read +/sensors/+/response
+topic read +/sensors/+/status
+topic read +/sensors/+/firmware_status
+
+# API: sends commands and firmware updates. Reads nothing.
+user api
+topic write iot/sensors/+/command
+topic write iot/sensors/+/firmware
+
+# Test harness (only created when QA_MQTT_PASSWORD is set): plays any role.
+user qa
+topic readwrite #

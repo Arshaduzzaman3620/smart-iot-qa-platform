@@ -29,7 +29,7 @@ from helpers import MQTT_HOST, MQTT_PORT, TEST_PASSWORD, TEST_PREFIX, TEST_USER_
 # Shared fixtures, registered once so session fixtures (e.g. the receiver process) are never duplicated.
 pytest_plugins = ["stack_fixtures", "browser_servers"]
 
-LAYERS = ("unit", "api", "mqtt", "integration", "ui", "e2e")
+LAYERS = ("unit", "api", "mqtt", "integration", "ui", "e2e", "reliability")
 
 
 def pytest_collection_modifyitems(config, items):
