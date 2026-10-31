@@ -7,6 +7,14 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# The broker keeps a persistent session per client ID, so it must be stable and unique per receiver.
+RECEIVER_CLIENT_ID = os.getenv("RECEIVER_CLIENT_ID", "receiver")
+# Broker account (docker/mosquitto/acl): may only read what sensors send. Default = the Compose dev password.
+MQTT_USERNAME = "receiver"
+MQTT_PASSWORD = os.getenv("RECEIVER_MQTT_PASSWORD", "receiver-dev-password")
+# Two-level topic root: {TOPIC_ROOT}/{sensor_id}/telemetry. Only changed by reliability tests, which
+# need their own namespace next to a running receiver.
+TOPIC_ROOT = os.getenv("TOPIC_ROOT", "iot/sensors")
 
 # Offline detection: a sensor with no stored reading for OFFLINE_TIMEOUT seconds is marked OFFLINE.
 # Default 30 s = 6 missed readings at the default 5 s interval, so a short hiccup isn't an outage.

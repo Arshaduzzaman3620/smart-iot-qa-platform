@@ -59,18 +59,18 @@ async def upload_firmware(
     """Raw image bytes as the request body (`Content-Type: application/octet-stream`), at most 1 MiB."""
     filename = filename or f"firmware-{version}.bin"
     if not FILENAME_PATTERN.match(filename):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="filename may use A-Z a-z 0-9 _ . - only")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="filename may use A-Z a-z 0-9 _ . - only")
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > FIRMWARE_MAX_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Firmware larger than 1 MiB")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail="Firmware larger than 1 MiB")
     # Read with a cap, so a missing or false Content-Length can't make the API buffer a huge body.
     content = bytearray()
     async for chunk in request.stream():
         content += chunk
         if len(content) > FIRMWARE_MAX_BYTES:
-            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Firmware larger than 1 MiB")
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail="Firmware larger than 1 MiB")
     if not content:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Firmware image is empty")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Firmware image is empty")
 
     firmware = await run_in_threadpool(_store_firmware, version, filename, bytes(content), user.username)
     logger.info("Firmware %s uploaded by %s (%d bytes, sha256 %s)", version, user.username, firmware.size,

@@ -6,13 +6,13 @@ import uuid
 import paho.mqtt.client as mqtt
 import pytest
 
-from helpers import MQTT_HOST, MQTT_PORT
+from helpers import MQTT_HOST, MQTT_PORT, mqtt_client
 
 pytestmark = pytest.mark.usefixtures("broker_available")
 
 
 def make_client(on_message=None) -> mqtt.Client:
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"pytest-{uuid.uuid4().hex[:8]}")
+    client = mqtt_client(f"pytest-{uuid.uuid4().hex[:8]}")
     if on_message:
         client.on_message = on_message
     client.connect(MQTT_HOST, MQTT_PORT)

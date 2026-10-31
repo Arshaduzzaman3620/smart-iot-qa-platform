@@ -163,3 +163,108 @@ def test_small_batch_sizes(max_batch):
     recorder = run(repo, range(7), max_batch=max_batch)
     assert recorder.saved == list(range(7))
     assert max(len(b) for b in repo.batches) == max_batch
+
+
+# ---- database outages and acknowledgements (Phase 15f) -----------------------------------------
+
+def outage_error(code=2013):
+    from pymysql.err import OperationalError as PyMySQLError
+    return OperationalError("INSERT ...", {}, PyMySQLError(code, "Lost connection to MySQL server"))
+
+
+class FlakyRepository(FakeRepository):
+    """Unreachable for the first `down_for` attempts, then fine."""
+
+    def __init__(self, down_for: int):
+        super().__init__()
+        self.down_for, self.attempts = down_for, 0
+
+    def save_batch(self, batch):
+        self.attempts += 1
+        if self.attempts <= self.down_for:
+            raise outage_error()
+        return super().save_batch(batch)
+
+
+@pytest.fixture
+def no_backoff(monkeypatch):
+    import storage.batch_writer as module
+    monkeypatch.setattr(module, "RETRY_MIN", 0.01)
+    monkeypatch.setattr(module, "RETRY_MAX", 0.02)
+
+
+@pytest.mark.parametrize("code", [2003, 2006, 2013, 2055])
+def test_connection_errors_count_as_an_outage(code):
+    from storage.batch_writer import is_outage
+    assert is_outage(outage_error(code))
+
+
+def test_data_errors_are_not_an_outage():
+    from storage.batch_writer import is_outage
+    assert not is_outage(db_error())
+
+
+def test_outage_holds_the_batch_and_stores_it_when_back(no_backoff):
+    from helpers import wait_until
+
+    repo, recorder = FlakyRepository(down_for=3), Recorder()
+    writer = BatchWriter(repo, recorder.on_saved, recorder.on_failed)
+    for i in (1, 2, 3):
+        writer.submit({"id": i})
+    writer.start()
+    wait_until(lambda: len(recorder.saved) == 3, timeout=5)  # not stopping: stop() limits the waiting
+    assert writer.stop()
+    assert recorder.saved == [1, 2, 3] and recorder.failed == []
+    assert repo.attempts == 4  # three refused, then stored -- the batch was never split or dropped
+
+
+def test_outage_state_is_visible_while_down(no_backoff):
+    gate, seen = threading.Event(), []
+
+    class Watched(FlakyRepository):
+        def save_batch(self, batch):
+            seen.append(writer.in_outage)
+            return super().save_batch(batch)
+
+    recorder = Recorder()
+    writer = BatchWriter(Watched(down_for=2), recorder.on_saved, recorder.on_failed)
+    writer.submit({"id": 1})
+    writer.start()
+    assert writer.stop()
+    assert seen == [False, True, True]
+    assert writer.in_outage is False and writer.outage_ended_at is not None
+
+
+def test_ack_runs_after_storing():
+    order = []
+    recorder = Recorder()
+    recorder.on_saved = lambda data, result: order.append(("stored", data["id"]))
+    writer = BatchWriter(FakeRepository(), recorder.on_saved, recorder.on_failed)
+    for i in (1, 2):
+        writer.submit({"id": i}, on_done=lambda i=i: order.append(("acked", i)))
+    writer.start()
+    assert writer.stop()
+    assert order == [("stored", 1), ("acked", 1), ("stored", 2), ("acked", 2)]
+
+
+def test_rejected_message_is_acked_so_it_is_not_redelivered():
+    acked = []
+    recorder = Recorder()
+    writer = BatchWriter(FakeRepository(bad_ids={2}), recorder.on_saved, recorder.on_failed)
+    for i in (1, 2, 3):
+        writer.submit({"id": i}, on_done=lambda i=i: acked.append(i))
+    writer.start()
+    assert writer.stop()
+    assert recorder.failed == [2]
+    assert acked == [1, 2, 3]
+
+
+def test_unreachable_at_shutdown_is_not_acked_so_the_broker_redelivers(no_backoff):
+    acked = []
+    recorder = Recorder()
+    writer = BatchWriter(FlakyRepository(down_for=10_000), recorder.on_saved, recorder.on_failed)
+    writer.submit({"id": 1}, on_done=lambda: acked.append(1))
+    writer.start()
+    assert writer.stop(timeout=10)
+    assert recorder.failed == [1]
+    assert acked == []

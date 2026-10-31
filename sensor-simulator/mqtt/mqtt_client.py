@@ -9,12 +9,16 @@ logger = logging.getLogger("mqtt_client")
 class MQTTClient:
     """Thin wrapper around paho-mqtt: connect, publish, subscribe, reconnect, log. No sensor logic here."""
 
-    def __init__(self, host: str, port: int, client_id: str):
+    def __init__(self, host: str, port: int, client_id: str, username: str | None = None,
+                 password: str | None = None):
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
+        if username:
+            self._client.username_pw_set(username, password)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
-        self._client.reconnect_delay_set(min_delay=1, max_delay=30)
+        # Capped at 10 s: after a long outage a sensor is back within 10 s of the broker (was 30 s).
+        self._client.reconnect_delay_set(min_delay=1, max_delay=10)
         self._host = host
         self._port = port
         self._connected = threading.Event()
@@ -67,18 +71,24 @@ class MQTTClient:
         """Block until the first connection succeeds or `timeout` seconds pass. Returns True if connected."""
         return self._connected.wait(timeout)
 
-    def publish(self, topic: str, payload: str, qos: int = 0) -> bool:
+    def publish(self, topic: str, payload: str | bytes, qos: int = 0) -> bool:
+        """True only once the broker has it (for QoS 1: its PUBACK arrived)."""
         if not self._client.is_connected():
-            logger.warning("Skipping publish to %s: not connected to broker", topic)
+            logger.debug("Skipping publish to %s: not connected to broker", topic)
             return False
         try:
             result = self._client.publish(topic, payload, qos=qos)
             result.wait_for_publish(timeout=5)
-            logger.info("Published to %s", topic)
-            return True
         except (RuntimeError, ValueError) as exc:
             logger.warning("Publish to %s failed: %s", topic, exc)
             return False
+        if not result.is_published():
+            # Connection dropped mid-publish: report it, so the caller keeps the reading. If paho
+            # delivers it after all, the receiver's duplicate check stores it once.
+            logger.warning("Publish to %s not acknowledged within 5 s", topic)
+            return False
+        logger.info("Published to %s", topic)
+        return True
 
     def publish_nowait(self, topic: str, payload: str, qos: int = 1, retain: bool = False):
         """Queue a publish without waiting for it. Safe inside paho callbacks, where waiting would deadlock."""

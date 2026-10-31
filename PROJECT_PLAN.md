@@ -17,16 +17,16 @@ This project is built **one phase at a time**. A phase is not started until the 
 - [x] **Phase 12** — Full first E2E flow verified manually (sensor → MQTT → receiver → validate → MySQL → FastAPI → dashboard)
 - [x] **Phase 13** — Test automation foundation (unit, API, MQTT, integration, UI, E2E)
 - [x] **Phase 14** — Scale to multiple sensors (5 → 10 → 50 → 100)
-- [ ] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
+- [x] **Phase 15** — Advanced features: alerts, commands, authentication, FOTA, failure injection, performance, security, reliability *(in progress, one PR per part)*
   - [x] **15a** — Threshold alerts and offline detection
   - [x] **15b** — Receiver throughput: batched writes
   - [x] **Portable environment** — whole platform and test suite in Docker, CI on every push
   - [x] **15c** — Authentication and roles
   - [x] **15d** — Sensor commands
   - [x] **15e** — FOTA (firmware over the air)
-  - [ ] **15f** — Reliability and failure injection *(next)*
-  - [ ] **15g** — Security and performance
-- [ ] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
+  - [x] **15f** — Reliability and failure injection
+  - [x] **15g** — Security and performance
+- [x] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 
 ## Definition of Done (per phase)
 
@@ -51,7 +51,30 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 15e complete: firmware over the air.** Details: [docs/architecture/fota.md](docs/architecture/fota.md).
+**Phase 16 complete: the project is finished.** Results: [docs/testing/final-report.md](docs/testing/final-report.md).
+- **AI QA assistant** ([qa-assistant/](qa-assistant/), [doc](docs/testing/ai-qa-assistant.md)): `generate-tests` turns a requirement into positive, negative and boundary test cases per layer, marking what is already covered. `analyze-failures` classifies each failure of a pytest run, with evidence and a next step. Claude Opus 5.5 via the Anthropic SDK, with structured outputs (Pydantic), the project docs as the cached specification, refusal fallback, and every non-answer turned into a clear error. 17 tests with a fake client (no API calls, no key needed in CI). Not yet run against the live API (no key on the build machine).
+- **Final QA report:** test inventory (703 tests, 7 layers), requirements traceability (11 of 11 covered), the defect log (31 found and fixed), known limits, and how to reproduce.
+- **Docs polish:** the README is the project's front page (results, quick start, features, architecture, stack), test counts are updated, and every doc link was checked.
+- **CI** (since the portable environment): test suite, full-stack start and dependency audit on every push.
+- **Final regression (2026-10-30):** the full suite twice in a row, **703 / 703 passed both times** (3 min 22 s and 3 min 27 s, no flaky tests). A fresh install from empty volumes in an isolated Compose project: all services healthy, first admin created, sign-in through the dashboard, 5 / 5 sensors reporting with firmware and names, 0 error lines. A mutation check (temperature limit widened 85 → 86 in the test container only) was caught by 3 tests in 3 places. CI workflow YAML valid (jobs: tests, stack, audit). Load, stress, spike and soak and the 100-sensor ingestion check: see 15g. One `docker compose up` of the fresh project failed instantly on the first try with its output discarded; the identical command then succeeded, and it did not recur.
+
+**Phase 15g (previous): security and performance. Phase 15 is done.** Details: [docs/security/security.md](docs/security/security.md), [docs/testing/performance.md](docs/testing/performance.md).
+- **MQTT security:** no anonymous access. Four accounts (`sensor`, `receiver`, `api`, `qa` for tests), passwords from the environment, written to the broker's password file at start. ACLs limit each account to its own topics. Verified on the live broker: anonymous and wrong-password clients are refused, and a `sensor` account's forged RESTART command never arrives.
+- **API security:** login rate limiting (5 failures per username, 20 per client, per 5 min → 429 + Retry-After). Security headers on every response (strict CSP, nosniff, DENY framing, no-referrer, no-store), and a strict CSP on the dashboard: the real build runs with **no CSP violations** in a browser. No CORS. Hostile-input tests (SQL injection, traversal, oversized and malformed bodies). `pip-audit` and `npm audit` in CI.
+- **Performance (k6, in Docker):** load (50 VUs) 144 req/s, p95 38 ms, 0 % errors. Soak 0 % errors, flat memory. Stress and spike up to 300 VUs: **0 % errors, 303 req/s, max 0.7 s.** Ingestion at 100 sensors: 100 msg/s stored with 0 missing, 0 duplicates, max latency 1 s.
+- **Defects found by the load tests:** (1) **A DB connection leak killed the API** after a stress run: sync session cleanup never ran for requests cancelled under overload, so `/health` never answered again. The session now closes in an async dependency, and pool exhaustion gives a fast `503 Database busy`. (2) **Throughput collapsed in a spike** (29 req/s, 13 % failed): requests held connections while waiting for worker threads. Auth now uses its own short session, and the pool matches the threads. (3) **Admission:** a concurrency limit (32 in flight, others wait outside holding nothing). Result: 124 → 303 req/s, 1.1 % → 0 % errors, max 60 s → 0.7 s.
+- Also: dashboard buttons no longer wrap. Test-isolation fixes (an async test helper that runs alongside Playwright, unique test module names).
+- Tests: 686 (66 new: MQTT ACLs, rate limiting, headers, hostile input, middleware). All pass.
+
+**Phase 15f (previous): reliability and failure injection.** Details: [docs/testing/reliability.md](docs/testing/reliability.md).
+- The pipeline is now **at-least-once with deduplication**. MySQL down: the receiver holds and retries (was: dropped). Broker unreachable: sensors buffer up to 1000 readings and resend in order (was: dropped). Receiver down or crashed: persistent MQTT session + QoS 1, so the broker queues for it. Broker restart: Mosquitto persistence. Redeliveries and resends: identical readings stored once. Offline detection pauses during an outage and its backlog. This closes the Phase 12 "no buffering" limitation.
+- Fault injection: `FAULT_INVALID_RATE` / `FAULT_MALFORMED_RATE` / `FAULT_DUPLICATE_RATE` in the simulator, and an in-test TCP proxy that cuts MySQL or the broker without Docker access, so it works the same in CI.
+- New `tests/reliability` layer: MySQL outage (50 held, stored 5.3 s after recovery), broker outage (75 buffered, stored 5.4 s after), receiver SIGKILL (50 queued, stored 0.3 s after restart), faulty sensors. **0 lost and 0 duplicates in every scenario.** Verified on the real stack too: `docker compose stop mysql` 20 s → 48 sent, 48 stored; `docker compose restart mqtt` → 0 duplicates.
+- Defects found and fixed: (1) paho acknowledged QoS 1 messages when queued, not when stored, so a receiver crash lost them; now manual acks after storing. (2) The first broker-outage test passed while every buffered reading was lost, because it only compared against "sent". Fixed the test, capped reconnect backoff at 10 s, and the simulator flushes and reports on shutdown. (3) The simulator's `publish()` reported success without a PUBACK.
+- Measurement caveat found: a suspended Mac freezes the simulated sensors too (one run looked like loss until the log showed a 90 s system sleep).
+- Tests: 620 (21 new). All pass.
+
+**Phase 15e (previous): firmware over the air.** Details: [docs/architecture/fota.md](docs/architecture/fota.md).
 - ADMIN uploads an image (raw bytes, at most 1 MiB, SHA-256 computed). OPERATOR starts an update. The sensor gets the version, size, checksum and a **10-minute download token scoped to that one image**, downloads over HTTP, verifies size and SHA-256, installs and reboots, reporting DOWNLOADING → VERIFYING → INSTALLING → SUCCEEDED / FAILED. The receiver applies progress forward-only and only for the sensor's own update, sets the new version on success, and times out stalled updates (`FOTA_TIMEOUT`).
 - Failure scenarios: low battery, download failure, corrupt image, install failure with rollback, same version, concurrent update, no answer, broker down. `download` / `corrupt` / `install` can be injected with `FOTA_FAILURE`. In every failure the sensor keeps its old firmware.
 - Verified by hand: upload validation (409 duplicate, 413 > 1 MiB, 422 empty or bad version), a full update 1.0.0 → 1.1.0, each injected failure (sensor stays on 1.0.0), then a normal update succeeding, and 5 token attacks (tampered, login-as-download, wrong image, download-as-login, none) all refused.
