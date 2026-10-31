@@ -64,7 +64,7 @@ The sensor's next stored reading sets it back to `ONLINE` and resolves the alert
 
 Alert handling adds one indexed lookup to each stored message (~1 ms round trip, roughly 4 % of a save; `EXPLAIN ANALYZE` shows `ix_alerts_sensor_status`). Writes only happen when an alert actually changes.
 
-The receiver's bottleneck is still committing every message on its own, which costs two disk flushes with MySQL's default durability settings. Commit cost varies a lot on this Windows + Docker machine: 15–40 ms per save, depending on the moment. At the slow end a single receiver no longer keeps up with 100 sensors (20 msg/s), and the 100-sensor scale check fails on latency (no messages are lost). This was also reproduced with Phase 14 code on the same day. Batched writes (Phase 15b) address it.
+In 15a the receiver's bottleneck was committing every message on its own, which costs two disk flushes with MySQL's default durability settings. Commit cost varies a lot on this Windows + Docker machine: 15–40 ms per save, depending on the moment. At the slow end a single receiver no longer keeps up with 100 sensors (20 msg/s), and the 100-sensor scale check fails on latency (no messages are lost). This was also reproduced with Phase 14 code on the same day. Batched writes (Phase 15b) fixed this; see [scale-results.md](../testing/scale-results.md).
 
 ## Testing
 

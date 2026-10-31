@@ -1,5 +1,7 @@
 import logging
+import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -11,8 +13,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from config import settings
 from mqtt.mqtt_client import MQTTSubscriber
 from parser.message_parser import MessageParser, ParseError
+from storage.batch_writer import BatchWriter
+from storage.command_repository import CommandRepository
 from storage.offline_detector import OfflineDetector
 from storage.telemetry_repository import TelemetryRepository
+from validator.device_message_validator import validate_response, validate_status
 from validator.telemetry_validator import TelemetryValidator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -20,8 +25,44 @@ logger = logging.getLogger("receiver")
 alert_logger = logging.getLogger("receiver.alerts")
 
 TELEMETRY_TOPIC = "iot/sensors/+/telemetry"
+# Phase 15d: sensors answer commands on .../response and describe themselves on .../status.
+RESPONSE_TOPIC = "iot/sensors/+/response"
+STATUS_TOPIC = "iot/sensors/+/status"
 
-repository = TelemetryRepository()
+# Set by Ctrl+C / SIGTERM (e.g. `docker stop`) / Ctrl+Break on Windows. Stopping disconnects from
+# the broker first, then lets the writer store every message it already accepted.
+stop_requested = threading.Event()
+
+
+def request_stop(signum, frame):
+    logger.info("Stop requested (%s)", signal.Signals(signum).name)
+    stop_requested.set()
+
+
+def install_stop_handlers():
+    for name in ("SIGINT", "SIGTERM", "SIGBREAK"):  # SIGBREAK exists only on Windows
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), request_stop)
+
+
+def log_saved(data: dict, result):
+    logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
+    for change in result.alert_changes:
+        if change.action == "RESOLVE":
+            alert_logger.info("Alert resolved for %s: %s", data["sensor_id"], change.alert_type)
+        else:
+            alert_logger.warning("Alert %s for %s: %s %s - %s",
+                                 "raised" if change.action == "RAISE" else "escalated", data["sensor_id"],
+                                 change.alert_type, change.severity, change.message)
+
+
+def log_failed(data: dict, exc: Exception):
+    # DB down or rejecting the write: drop this message but keep the receiver running.
+    logger.error("Failed to store telemetry from %s: %s", data["sensor_id"], getattr(exc, "orig", exc))
+
+
+writer = BatchWriter(TelemetryRepository(), log_saved, log_failed, max_batch=settings.RECEIVER_BATCH_MAX)
+commands = CommandRepository()
 
 
 def topic_sensor_id(topic: str) -> str:
@@ -30,12 +71,20 @@ def topic_sensor_id(topic: str) -> str:
 
 
 def on_message(client, userdata, msg):
+    if not msg.payload and msg.topic.endswith("/status"):
+        return  # an empty retained message is how a sensor's status is cleared from the broker
     # Receiver never trusts incoming data: parse, validate, and only then store.
     try:
         data = MessageParser.parse(msg.payload)
     except ParseError as exc:
         logger.warning("Rejected message on %s: %s (raw=%r)", msg.topic, exc, msg.payload[:200])
         return
+
+    kind = msg.topic.rsplit("/", 1)[-1]
+    if kind == "response":
+        return on_response(msg.topic, data)
+    if kind == "status":
+        return on_status(msg.topic, data)
 
     errors = TelemetryValidator.validate(data)
     if not errors and data["sensor_id"] != topic_sensor_id(msg.topic):
@@ -45,21 +94,54 @@ def on_message(client, userdata, msg):
         logger.warning("Rejected message on %s: %s", msg.topic, "; ".join(errors))
         return
 
-    try:
-        result = repository.save(data)
-    except SQLAlchemyError as exc:
-        # DB down or rejecting the write: drop this message but keep the receiver running.
-        logger.error("Failed to store telemetry from %s: %s", data["sensor_id"], getattr(exc, "orig", exc))
-        return
+    # Stored (and logged) by the writer thread, batched with whatever else is waiting.
+    writer.submit(data)
 
-    logger.info("Stored telemetry id=%s from %s: %s", result.telemetry_id, data["sensor_id"], data)
-    for change in result.alert_changes:
-        if change.action == "RESOLVE":
-            alert_logger.info("Alert resolved for %s: %s", data["sensor_id"], change.alert_type)
-        else:
-            alert_logger.warning("Alert %s for %s: %s %s - %s",
-                                 "raised" if change.action == "RAISE" else "escalated", data["sensor_id"],
-                                 change.alert_type, change.severity, change.message)
+
+def on_response(topic: str, data: dict):
+    """A sensor's answer to a command. Low volume, so stored right here rather than batched."""
+    errors = validate_response(data)
+    if errors:
+        logger.warning("Rejected response on %s: %s", topic, "; ".join(errors))
+        return
+    sensor_id = topic_sensor_id(topic)
+    try:
+        applied = commands.complete(sensor_id, data["command_id"], data["status"], data.get("message"))
+    except SQLAlchemyError as exc:
+        logger.error("Failed to store response from %s: %s", sensor_id, getattr(exc, "orig", exc))
+        return
+    if applied:
+        logger.info("Command %s on %s %s: %s", data["command_id"], sensor_id, data["status"], data.get("message"))
+    else:
+        # Unknown id, already finished (duplicate, or late after TIMED_OUT), or another sensor's command.
+        logger.warning("Ignored response from %s for command %s: no such pending command for this sensor",
+                       sensor_id, data["command_id"])
+
+
+def on_status(topic: str, data: dict):
+    errors = validate_status(data)
+    if not errors and data.get("sensor_id") not in (None, topic_sensor_id(topic)):
+        errors.append(f"sensor_id {data['sensor_id']!r} does not match topic {topic!r}")
+    if errors:
+        logger.warning("Rejected status on %s: %s", topic, "; ".join(errors))
+        return
+    sensor_id = topic_sensor_id(topic)
+    try:
+        commands.save_status(sensor_id, data)
+    except SQLAlchemyError as exc:
+        logger.error("Failed to store status from %s: %s", sensor_id, getattr(exc, "orig", exc))
+        return
+    logger.info("Status from %s: firmware %s, %s", sensor_id, data.get("firmware_version"), data.get("name"))
+
+
+def expire_commands():
+    try:
+        expired = commands.expire(settings.COMMAND_TIMEOUT)
+    except SQLAlchemyError as exc:
+        logger.error("Command timeout check failed: %s", getattr(exc, "orig", exc))
+        return
+    if expired:
+        logger.warning("%d command(s) timed out (no response within %g s)", expired, settings.COMMAND_TIMEOUT)
 
 
 def check_offline(detector: OfflineDetector):
@@ -73,25 +155,31 @@ def check_offline(detector: OfflineDetector):
 
 
 def main():
+    install_stop_handlers()
+    writer.start()
     mqtt_client = MQTTSubscriber(settings.MQTT_HOST, settings.MQTT_PORT, client_id="receiver")
     mqtt_client.set_message_handler(on_message)
-    mqtt_client.connect([TELEMETRY_TOPIC])
-    logger.info("Receiver starting, subscribing to %s", TELEMETRY_TOPIC)
+    mqtt_client.connect([TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC])
+    logger.info("Receiver starting, subscribing to %s, %s, %s", TELEMETRY_TOPIC, RESPONSE_TOPIC, STATUS_TOPIC)
 
     detector = OfflineDetector(settings.OFFLINE_TIMEOUT)
     next_check = time.monotonic() + settings.OFFLINE_STARTUP_GRACE
     logger.info("Offline detection: timeout %gs, first check in %gs", settings.OFFLINE_TIMEOUT, settings.OFFLINE_STARTUP_GRACE)
 
     try:
-        while True:
+        while not stop_requested.is_set():
             if time.monotonic() >= next_check:
                 check_offline(detector)
+                expire_commands()
                 next_check = time.monotonic() + settings.OFFLINE_CHECK_INTERVAL
-            time.sleep(min(1, settings.OFFLINE_CHECK_INTERVAL))
-    except KeyboardInterrupt:
-        logger.info("Stop requested (Ctrl+C)")
+            stop_requested.wait(min(1, settings.OFFLINE_CHECK_INTERVAL))
     finally:
         mqtt_client.disconnect()
+        # Store what was already accepted before exiting.
+        if writer.stop():
+            logger.info("Receiver stopped")
+        else:
+            logger.error("Receiver stopped before storing every queued message")
 
 
 if __name__ == "__main__":

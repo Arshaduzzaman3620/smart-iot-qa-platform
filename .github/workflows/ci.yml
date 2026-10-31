@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: Test suite (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run every test layer
+        run: docker compose -f compose.test.yaml run --rm --build tests
+
+      - name: Stop test services
+        if: always()
+        run: docker compose -f compose.test.yaml down -v
+
+  stack:
+    name: Full stack starts (docker compose up)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the platform
+        run: docker compose up -d --build --wait
+
+      # The API needs a sign-in since Phase 15c: log in as the initial admin (compose.yaml defaults).
+      - name: Telemetry reaches the API and the dashboard proxy
+        run: |
+          token=$(curl -sf -X POST http://localhost:8080/api/auth/login -H 'Content-Type: application/json' \
+                    -d '{"username":"admin","password":"admin-dev-password"}' \
+                  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+          for i in $(seq 1 30); do
+            count=$(curl -sf -H "Authorization: Bearer $token" http://localhost:8080/api/sensors \
+                    | python3 -c 'import json,sys; print(sum(1 for s in json.load(sys.stdin) if s["latest_telemetry"]))' 2>/dev/null || echo 0)
+            [ "$count" -ge 1 ] && { echo "$count sensors reporting"; exit 0; }
+            sleep 2
+          done
+          echo "no telemetry after 60 s"; exit 1
+
+      - name: Logs
+        if: always()
+        run: docker compose logs --no-color
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

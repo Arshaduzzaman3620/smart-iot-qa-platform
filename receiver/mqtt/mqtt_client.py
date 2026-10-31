@@ -23,7 +23,7 @@ class MQTTSubscriber:
             # Re-issued here (not just once at startup) so subscriptions
             # survive a reconnect after the broker drops and comes back.
             for topic in self._topics:
-                client.subscribe(topic)
+                client.subscribe(topic, qos=1)
                 logger.info("Subscribed to %s", topic)
         else:
             logger.error("MQTT connection failed: %s", reason_code)

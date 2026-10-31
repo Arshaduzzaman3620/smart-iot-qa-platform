@@ -1,0 +1,7 @@
+# LF everywhere, on every OS. Files are copied into Linux containers, where a CRLF from a
+# Windows checkout breaks shell lines and config files.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary

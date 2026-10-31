@@ -1,14 +1,18 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database.models import Alert, Sensor, Telemetry
+from database.models import Alert, Sensor, Telemetry, User
 
-from ..deps import get_db
-from ..schemas import AlertOut, SensorOut, SensorWithLatestOut, TelemetryOut
+from ..deps import get_db, require_role
+from ..schemas import AlertOut, SensorOut, SensorUpdateIn, SensorWithLatestOut, TelemetryOut
 from .alerts import AlertStatus, alerts_query
 
-router = APIRouter(prefix="/sensors", tags=["sensors"])
+logger = logging.getLogger("backend.sensors")
+# Reading needs any signed-in user; changes need OPERATOR (per endpoint below).
+router = APIRouter(prefix="/sensors", tags=["sensors"], dependencies=[Depends(require_role("VIEWER"))])
 
 
 def _get_sensor_or_404(db: Session, sensor_id: str) -> Sensor:
@@ -45,6 +49,19 @@ def list_sensors(db: Session = Depends(get_db)):
 @router.get("/{sensor_id}", response_model=SensorOut)
 def get_sensor(sensor_id: str, db: Session = Depends(get_db)):
     return _get_sensor_or_404(db, sensor_id)
+
+
+@router.patch("/{sensor_id}", response_model=SensorOut)
+def update_sensor(sensor_id: str, body: SensorUpdateIn, db: Session = Depends(get_db),
+                  user: User = Depends(require_role("OPERATOR"))):
+    sensor = _get_sensor_or_404(db, sensor_id)
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(sensor, field, value)
+    db.commit()
+    db.refresh(sensor)
+    logger.info("Sensor %s updated by %s: %s", sensor_id, user.username, changes)
+    return sensor
 
 
 @router.get("/{sensor_id}/telemetry", response_model=list[TelemetryOut])

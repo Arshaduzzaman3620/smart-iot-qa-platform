@@ -14,11 +14,17 @@ Database: `smart_iot`
 
 `id, sensor_id, alert_type, severity, value, message, created_at, resolved_at, status`
 
+## commands
+
+`id, sensor_id, command, params, status, message, requested_by, created_at, completed_at`
+
+One row per command sent to a sensor (Phase 15d). `params` is JSON, and `status` is `SENT` → `SUCCEEDED` / `FAILED` / `TIMED_OUT`. Deleted with its sensor (cascade). Indexes: `(sensor_id, created_at)` for a sensor's history, and `(status, created_at)` for the timeout sweep. See [commands.md](commands.md).
+
 ## users
 
 `id, username, password_hash, role, created_at`
 
-Roles: `ADMIN`, `OPERATOR`, `VIEWER`
+Roles: `ADMIN`, `OPERATOR`, `VIEWER`. `username` is unique. `password_hash` is a salted scrypt hash, never the password (see [auth.md](../api/auth.md)).
 
 ## firmware
 
@@ -39,7 +45,7 @@ sensors
 
 ## Implementation status
 
-`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8). `users`, `firmware`, and `firmware_updates` are still design only and arrive with their features in Phase 15.
+`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), `users` since Phase 15c, and `commands` since 15d. `firmware` and `firmware_updates` arrive with FOTA.
 
 Implementation notes:
 
@@ -56,7 +62,7 @@ Implementation notes:
 
 ## How the receiver writes
 
-For each accepted message, `receiver/storage/telemetry_repository.py` runs one transaction:
+Accepted messages are queued for a single writer thread ([receiver/storage/batch_writer.py](../../receiver/storage/batch_writer.py)). It stores whatever is waiting, up to `RECEIVER_BATCH_MAX` (default 200), in **one transaction** via `TelemetryRepository.save_batch`, applying these steps to each message in arrival order:
 
 1. Upsert `sensors` by `sensor_id`: insert if new (auto-registration), otherwise set `status=ONLINE`, `battery`, `last_seen` (receiver's UTC clock), and `updated_at`.
 2. Insert one `telemetry` row. `timestamp` is the sensor's ISO 8601 value converted to UTC. `received_at` is set by MySQL.
@@ -65,15 +71,17 @@ For each accepted message, `receiver/storage/telemetry_repository.py` runs one t
 
 Separately, the receiver's offline check sets silent `ONLINE` sensors to `OFFLINE` and inserts their `OFFLINE` alerts.
 
+One commit per batch instead of per message is what lifted the receiver's ceiling from ~33 to ~95 msg/s (Phase 15b). The result is identical to saving the messages one by one, alerts included. If a batch fails, the writer retries its messages individually, so only a message MySQL rejects is lost.
+
 All `DATETIME` columns hold UTC, in whole seconds. The receiver truncates fractions itself, because MySQL would round them, which can put a time up to 0.5 s in the future. If MySQL is unavailable, the message is logged and dropped, and the receiver keeps running.
 
 ## Running it locally
 
 ```bash
 # from the repo root
-docker compose -f docker/docker-compose.yml up -d --wait mysql
+docker compose up -d --wait mysql
 pip install -r database/requirements.txt
 python -m database.init_db        # creates any missing tables; safe to re-run
 ```
 
-The container publishes MySQL on host port **3307** so it can't collide with a locally installed MySQL on 3306. Python running on the host therefore uses `MYSQL_HOST=localhost` and `MYSQL_PORT=3307` in `.env`. The database and app user are created from `.env` on the container's first start. Root gets a random password because the app never uses it.
+The container publishes MySQL on host port **3307** so it can't collide with a locally installed MySQL on 3306. Python running on the host therefore connects to `127.0.0.1:3307`, which is also the default in `database/config.py`, so no `.env` is needed. Containers connect to `mysql:3306` on the Compose network. The database and app user are created on the container's first start (values from `.env` if present, otherwise the defaults in `compose.yaml`). Root gets a random password because the app never uses it.
