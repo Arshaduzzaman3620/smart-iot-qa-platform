@@ -71,6 +71,7 @@ def test_each_button_sends_its_command(open_dashboard, mock_sensors_api, page):
     page.get_by_test_id("cmd-request").click()
     expect(page.get_by_test_id("command-list").locator("li")).to_have_count(1)
     page.get_by_test_id("cmd-restart").click()
+    page.get_by_test_id("confirm-ok").click()  # a restart asks first (Phase 18)
     expect(page.get_by_test_id("command-list").locator("li")).to_have_count(2)
     page.get_by_test_id("cmd-interval-value").fill("30")
     page.get_by_test_id("cmd-interval").click()
@@ -97,6 +98,7 @@ def test_broker_down_shows_the_reason(open_dashboard, mock_sensors_api, page):
     open_details(open_dashboard, mock_sensors_api, page)
     fake_command_api(page, [], post_status=503, post_body={"detail": "MQTT broker unreachable"})
     page.get_by_test_id("cmd-restart").click()
+    page.get_by_test_id("confirm-ok").click()
     expect(page.get_by_test_id("cmd-error")).to_have_text("MQTT broker unreachable")
 
 

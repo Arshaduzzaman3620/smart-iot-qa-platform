@@ -84,8 +84,10 @@ def broker():
 @pytest.fixture(autouse=True)
 def fresh_login_limits():
     """Failed logins in one test must not lock accounts in the next (backend/app/rate_limit.py)."""
-    from backend.app.api.auth import limiter
+    from backend.app.api.auth import forgot_limiter, limiter
 
-    limiter.reset()
+    for each in (limiter, forgot_limiter):
+        each.reset()
     yield
-    limiter.reset()
+    for each in (limiter, forgot_limiter):
+        each.reset()

@@ -1,6 +1,6 @@
 # Security
 
-What protects each part of the platform, and the tests that prove it. Everything here is fictional and local: the passwords below are **dev defaults** for a project that runs on one machine. Set your own in `.env` for anything else.
+What protects each part of the platform, and the tests that prove it. The platform runs locally: the passwords below are **dev defaults** for a project that runs on one machine. Set your own in `.env` for anything else.
 
 ## Threats and controls
 
@@ -24,7 +24,9 @@ What protects each part of the platform, and the tests that prove it. Everything
 | Leaking internals | Database errors become a bare `503`. No stack traces in responses, no `Server` version from nginx. | `main.py`, `nginx.conf` | `test_health.py`, `test_api_security.py` |
 | Vulnerable dependencies | Exact version pins. CI runs `pip-audit` (Python) and `npm audit --omit=dev` (dashboard) on every push. | `.github/workflows/ci.yml` | CI |
 | **Eavesdropping, man in the middle** | TLS on every connection that leaves a container: HTTPS, MQTT 8883, MySQL with `require_secure_transport`. Clients check the certificate and host name. Plain ports only on 127.0.0.1. | [tls.md](tls.md) | `test_tls.py`, `test_broker_tls.py`, CI full-stack job |
-| Production with dev settings | `APP_ENV=production` refuses to start with dev passwords, a weak `JWT_SECRET` or without TLS | `backend/app/config_check.py` | `test_tls.py` |
+| Account takeover through recovery | Reset links: 32 random bytes, only their SHA-256 stored, single use, 30 min, a new one cancels the old; sessions end on reset; the owner is emailed. Recovery never reveals whether an address exists (same answer, email in the background). Rate limited per address and client. | `api/auth.py`, [auth.md](../api/auth.md#accounts-and-recovery-phase-19) | `test_accounts.py` |
+| Unwanted accounts | No public sign-up: only an ADMIN creates accounts and assigns roles | `api/users.py` | `test_accounts.py` (`/auth/register` does not exist, only ADMIN may create) |
+| Production with dev settings | `APP_ENV=production`: the API refuses to start with dev passwords, a weak `JWT_SECRET`, without TLS or without a real mail server, and hides its interactive docs; the broker refuses dev passwords and drops the `qa` account | `backend/app/config_check.py`, `docker/mosquitto/entrypoint.sh` | `test_tls.py` |
 | Secrets in git | `.env` is git-ignored. Passwords and `JWT_SECRET` come only from the environment, and logs never contain them. | | review |
 
 ## Broker accounts
@@ -34,7 +36,7 @@ What protects each part of the platform, and the tests that prove it. Everything
 | `sensor` | simulator | `+/sensors/+/{telemetry,response,status,firmware_status}` | `+/sensors/+/{command,firmware}` | `SENSOR_MQTT_PASSWORD` |
 | `receiver` | receiver | nothing | `+/sensors/+/{telemetry,response,status,firmware_status}` | `RECEIVER_MQTT_PASSWORD` |
 | `api` | API | `iot/sensors/+/{command,firmware}` | nothing | `API_MQTT_PASSWORD` |
-| `qa` | tests only | anything | anything | `QA_MQTT_PASSWORD`. Leave it empty in any shared environment and the account isn't created. |
+| `qa` | tests only | anything | anything | `QA_MQTT_PASSWORD`. Leave it empty in any shared environment and the account isn't created; with `APP_ENV=production` it is never created. |
 
 With MQTT 3.1.1, a denied publish or subscribe is dropped silently (the client isn't told), so `test_acl.py` checks what is actually delivered.
 
@@ -51,3 +53,21 @@ With MQTT 3.1.1, a denied publish or subscribe is dropped silently (the client i
 - **One shared device account.** The broker can't stop one sensor publishing on another's topic. The receiver's topic and `sensor_id` checks catch a mismatch inside the payload, but not a device using another's topic and ID together. The fix is per-device credentials (client certificates, or Mosquitto's dynamic security plugin) with `%u` patterns in the ACL.
 - **In-memory login limiter.** Right for one API instance. Several instances would need a shared store, and an API restart resets the counts.
 - **Tokens can't be revoked individually** before they expire, except by deleting the user or changing `JWT_SECRET`.
+- **Firmware is checksummed, not signed.** The SHA-256 in the update message proves the download wasn't corrupted, not who built it: someone holding the device password could read every device's update message. Signing images with a key the devices trust would close this.
+- **Download tokens travel in the URL** (`?token=`), so they appear in nginx access logs. Each is valid for 10 minutes, for one image and one sensor.
+
+## Security review before going public (2026-10-31)
+
+A full review of the repository, its history and the deployment settings before the repository became public and the platform was deployed.
+
+| Check | Result |
+|---|---|
+| Secrets in the git history (gitleaks 8.21, every commit) | None. Two findings were test fixtures (a fake reset token, a deliberately wrong JWT key). `.env` and `certs/` were never committed. |
+| Personal data in tracked files (paths, emails, phone numbers) | None |
+| Python dependencies (pip-audit, all requirement files) | No known vulnerabilities |
+| Dashboard dependencies (npm audit, including dev tools) | Vite 6.0.7's dev server had a moderate and a high advisory (esbuild, GHSA-67mh-4wv8-2f99). Not shipped, but upgraded to 6.4.5: 0 vulnerabilities |
+| **Broker in production** | **Fixed.** Port 8883 faces the internet, but the broker accepted the dev passwords and created the `qa` account (read and write on every topic) with its default password. It now refuses to start with `APP_ENV=production` and dev passwords, and never creates `qa` there |
+| Mail in production | **Fixed.** The production check accepted the default `SMTP_HOST=mailpit`, so reset emails would have silently stayed in the local test inbox |
+| API docs in production | **Fixed.** `/docs` and `/openapi.json` listed every endpoint publicly; off with `APP_ENV=production` |
+| CI token | **Fixed.** The workflow now runs with a read-only `GITHUB_TOKEN` (`permissions: contents: read`) |
+| Authentication, roles, reset flow, headers, CSP, TLS, rate limits | Reviewed; no change needed |

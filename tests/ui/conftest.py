@@ -39,7 +39,16 @@ def mock_firmware_api(page):
 
 
 @pytest.fixture
-def mock_sensors_api(page, mock_alerts_api, mock_firmware_api):
+def mock_users_api(page):
+    """Replace /api/users (the ADMIN users screen, Phase 18). Defaults to none. Without it an ADMIN page
+    reached a real API left running by the e2e tests, got 401 for the fake token, and signed out."""
+    mock = _mocker(page, "**/api/users**")
+    mock([])
+    return mock
+
+
+@pytest.fixture
+def mock_sensors_api(page, mock_alerts_api, mock_firmware_api, mock_users_api):
     """Replace GET /api/sensors with a canned response."""
     return _mocker(page, "**/api/sensors")
 

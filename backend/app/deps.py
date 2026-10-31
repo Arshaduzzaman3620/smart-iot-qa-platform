@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import timezone
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -53,8 +54,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(
         user = session.scalar(select(User).where(User.username == claims["sub"]))
         if user is not None:
             session.expunge(user)
-    if user is None:
+    if user is None or user.status != "ACTIVE":
         raise _unauthorized("Invalid token")
+    # A password reset ends every session that started before it (Phase 19).
+    if user.password_changed_at is not None:
+        changed = user.password_changed_at.replace(tzinfo=timezone.utc).timestamp()
+        if claims.get("iat", 0) < changed:
+            raise _unauthorized("Session ended: the password was changed")
     return user
 
 

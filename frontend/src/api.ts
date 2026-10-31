@@ -1,4 +1,4 @@
-import type { Alert, Command, CommandName, Firmware, FirmwareUpdate, Sensor, Session, Telemetry } from "./types";
+import type { Alert, Command, CommandName, Firmware, FirmwareUpdate, Role, Sensor, Session, Telemetry, User } from "./types";
 
 const API_BASE = "/api";
 
@@ -30,6 +30,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // The dev proxy answers 500/502/504 itself when FastAPI is not running.
   if (response.status >= 500) throw new ApiError("Cannot reach the API");
   if (!response.ok) throw new ApiError(await detail(response, `API error ${response.status}`));
+  // 204 No Content (e.g. DELETE /users/x) has no body to parse.
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -105,4 +107,38 @@ export function startFirmwareUpdate(sensorId: string, firmwareId: number): Promi
     method: "POST",
     body: JSON.stringify({ firmware_id: firmwareId }),
   });
+}
+
+// ---- users (ADMIN only, Phase 18 screen) ----
+
+export function fetchUsers(signal?: AbortSignal): Promise<User[]> {
+  return request<User[]>("/users", { signal });
+}
+
+export function createUser(username: string, password: string, role: Role, email?: string): Promise<User> {
+  return request<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(email ? { username, password, role, email } : { username, password, role }),
+  });
+}
+
+/** Change another account's role (Phase 19). */
+export function updateUser(username: string, role: Role): Promise<User> {
+  return request<User>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify({ role }) });
+}
+
+// ---- accounts without signing in (Phase 19) ----
+
+interface Message { detail: string }
+
+export function forgotPassword(email: string): Promise<Message> {
+  return request<Message>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function resetPassword(token: string, password: string): Promise<Message> {
+  return request<Message>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) });
+}
+
+export function deleteUser(username: string): Promise<void> {
+  return request<void>(`/users/${encodeURIComponent(username)}`, { method: "DELETE" });
 }

@@ -2,7 +2,7 @@
 
 ## Functional requirements
 
-- Simulate fictional IoT sensors that generate realistic telemetry (temperature, humidity, pressure, light, battery) without any real hardware.
+- Simulate IoT sensors that generate realistic telemetry (temperature, humidity, pressure, light, battery) without any real hardware.
 - Publish telemetry over MQTT on a per-sensor topic.
 - Receive, parse, and validate incoming telemetry messages; reject and log anything malformed or out of range.
 - Persist valid telemetry, sensor status, and alerts in MySQL.
@@ -16,7 +16,7 @@
 
 ## Non-functional requirements
 
-- No dependency on physical hardware, company code, company data, company networks, or company credentials — everything is fictional and self-contained.
+- Runs without physical hardware: sensors are simulated in software, so the whole platform runs self-contained on one machine.
 - All configuration (DB credentials, MQTT host/port, API port) via `.env`, never hard-coded; `.env` is never committed.
 - Each service (simulator, receiver, backend, frontend) has clear, separated responsibilities — no mixing of MQTT logic with business/calculation logic.
 - Logs must be useful (connection events, validation results, errors) and must never contain secrets.

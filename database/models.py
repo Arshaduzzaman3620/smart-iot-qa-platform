@@ -96,6 +96,26 @@ class User(Base):
     # VIEWER < OPERATOR < ADMIN, see docs/api/auth.md.
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default="VIEWER")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    # Phase 19 (docs/api/auth.md): for "forgot username or password". Optional for accounts made earlier.
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, nullable=True)
+    # Accounts are created ACTIVE by an admin; any other value can't sign in (room to disable an account).
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ACTIVE")
+    # Tokens issued before this moment stop working (set when the password is reset or changed).
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PasswordReset(Base):
+    """A one-time password reset link (Phase 19). Only the SHA-256 of the token is stored, so a copy of
+    the database can't be used to reset anyone's password."""
+
+    __tablename__ = "password_resets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
 
 class Command(Base):

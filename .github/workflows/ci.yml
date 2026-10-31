@@ -6,6 +6,10 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only token: no job needs to write to the repository (public repo, pull requests from forks).
+permissions:
+  contents: read
+
 jobs:
   tests:
     name: Test suite (Docker)

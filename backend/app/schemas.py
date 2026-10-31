@@ -86,6 +86,7 @@ class UserOut(_UTCModel):
     username: str
     role: str
     created_at: datetime
+    email: str | None = None
 
 
 class TokenOut(BaseModel):
@@ -95,10 +96,46 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+USERNAME = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+PASSWORD = Field(min_length=8, max_length=128)
+# Deliberately simple: one @, something on both sides, a dot in the domain. The real check is that the
+# reset email arrives; a stricter pattern only rejects valid addresses.
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+def _clean_email(value: str | None) -> str | None:
+    """Trim and lower-case, so one address can't be registered twice in different case."""
+    return value.strip().lower() if value is not None else None
+
+
 class UserCreateIn(_StrictIn):
-    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
-    password: str = Field(min_length=8, max_length=128)
+    username: str = USERNAME
+    password: str = PASSWORD
     role: Role = "VIEWER"
+    email: str | None = Field(None, max_length=254, pattern=EMAIL_PATTERN)
+
+    _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _clean_email(v)))
+
+
+class UserUpdateIn(_StrictIn):
+    """PATCH /users/{username} (ADMIN): change the role."""
+
+    role: Role
+
+
+class ForgotIn(_StrictIn):
+    email: str = Field(min_length=3, max_length=254)
+
+    _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _clean_email(v)))
+
+
+class ResetIn(_StrictIn):
+    token: str = Field(min_length=20, max_length=100)
+    password: str = PASSWORD
+
+
+class MessageOut(BaseModel):
+    detail: str
 
 
 def _clean_text(value: str | None) -> str | None:

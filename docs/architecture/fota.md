@@ -1,6 +1,6 @@
 # Firmware Over The Air (FOTA)
 
-Simulated firmware updates for the fictional sensors (Phase 15e). The "firmware" is any small file. What is real is the flow around it: upload, checksum, a scoped download, verification, install, reboot, and every failure along the way.
+Simulated firmware updates for the simulated sensors (Phase 15e). The "firmware" is any small file. What is real is the flow around it: upload, checksum, a scoped download, verification, install, reboot, and every failure along the way.
 
 ## Flow
 

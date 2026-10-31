@@ -63,6 +63,8 @@ services:
       API_MQTT_PASSWORD: ${API_MQTT_PASSWORD:-api-dev-password}
       # Test-harness account (runs pytest from the host against this broker). Empty = not created.
       QA_MQTT_PASSWORD: ${QA_MQTT_PASSWORD:-qa-dev-password}
+      # production = refuse the dev passwords above and never create the qa account (entrypoint.sh).
+      APP_ENV: ${APP_ENV:-development}
     ports:
       - "127.0.0.1:${MQTT_PORT:-1883}:1883"
       - "${MQTTS_PORT:-8883}:8883"
@@ -160,6 +162,15 @@ services:
       TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
       # The dashboard's nginx passes the caller's address in X-Real-IP (login rate limiting).
       TRUST_PROXY: "1"
+      # Email for password resets and approvals (Phase 19): Mailpit below, or a real server in .env.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-SmartIoT <no-reply@smartiot.local>}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-}
+      # Links in emails point here: the dashboard as your browser reaches it.
+      APP_BASE_URL: ${APP_BASE_URL:-https://localhost:8443}
       # production = refuse to start with dev passwords or without TLS (backend/app/config_check.py).
       APP_ENV: ${APP_ENV:-development}
     ports:
@@ -224,6 +235,14 @@ services:
         condition: service_completed_successfully
       api:
         condition: service_started
+    restart: unless-stopped
+
+  # A local inbox for the emails the API sends (Phase 19): http://localhost:8025. Nothing leaves this
+  # machine. Point SMTP_HOST at a real mail server in .env to send for real.
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
     restart: unless-stopped
 
   # Load tests, only with --profile perf (docs/testing/performance.md):

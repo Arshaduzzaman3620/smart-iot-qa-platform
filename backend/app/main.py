@@ -44,7 +44,9 @@ async def lifespan(app: FastAPI):
     app.state.publisher.stop()
 
 
-app = FastAPI(title="SmartIoT Sensor API", version="0.2.0", lifespan=lifespan)
+# In production the interactive docs and the OpenAPI schema are off: a public map of every endpoint.
+_docs = {} if os.getenv("APP_ENV") != "production" else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="SmartIoT Sensor API", version="0.2.0", lifespan=lifespan, **_docs)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(users.router)

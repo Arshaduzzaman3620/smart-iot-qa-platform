@@ -3,6 +3,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, AuthError, fetchFirmware, uploadFirmware } from "../api";
 import { formatRelative } from "../format";
 import type { Firmware } from "../types";
+import { ChipIcon, UploadIcon } from "./Icons";
+import { useToast } from "./Toast";
 
 const MAX_BYTES = 1024 * 1024; // the API's limit
 
@@ -20,6 +22,7 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,6 +49,7 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
       const safe = new File([file], file.name.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 100));
       const uploaded = await uploadFirmware(version, safe);
       setMessage({ ok: true, text: `Uploaded ${uploaded.version}` });
+      toast(`Firmware ${uploaded.version} uploaded`);
       setVersion("");
       setReload((n) => n + 1);
     } catch (err) {
@@ -57,8 +61,11 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
   }
 
   return (
-    <section className="card" aria-labelledby="fw-heading" data-testid="firmware-library">
-      <h2 id="fw-heading">Firmware</h2>
+    <section className="panel" aria-labelledby="fw-heading" data-testid="firmware-library">
+      <div className="panel-head">
+        <h2 id="fw-heading">Firmware</h2>
+        <span className="meta">Images available for over-the-air updates</span>
+      </div>
       {canUpload && (
         <form className="edit" onSubmit={submit} data-testid="fw-upload">
           <label>
@@ -70,7 +77,7 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
             Image
             <input data-testid="fw-file" type="file" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
-          <button type="submit" disabled={busy} data-testid="fw-upload-submit">Upload</button>
+          <button type="submit" disabled={busy} data-testid="fw-upload-submit"><UploadIcon size={18} /> Upload</button>
         </form>
       )}
       {message && (
@@ -80,8 +87,9 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
       {images && images.length > 0 && (
         <ul className="plain" data-testid="fw-library">
           {images.map((f) => (
-            <li key={f.id} data-testid={`fw-image-${f.version}`}>
-              <span className="mono">{f.version}</span> {f.filename}{" "}
+            <li key={f.id} data-testid={`fw-image-${f.version}`} className="fw-item">
+              <span className="fw-chip"><ChipIcon size={18} /></span>
+              <span className="mono fw-version">{f.version}</span> {f.filename}{" "}
               <span className="meta">
                 {f.size} bytes · sha256 {f.checksum.slice(0, 12)}… · {f.uploaded_by}, {formatRelative(f.created_at, now)}
               </span>

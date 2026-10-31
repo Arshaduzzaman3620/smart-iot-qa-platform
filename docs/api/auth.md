@@ -28,10 +28,13 @@ The role is read from the database on **every request**, not from the token. Del
 
 | Method | Path | Role | Success | Errors |
 |---|---|---|---|---|
-| POST | `/auth/login` | none | `200` token + user | `401` wrong username or password (one message for both), `422` malformed body, `429` too many failures |
+| POST | `/auth/login` | none | `200` token + user | `401` wrong username or password (one message for both), `403` account switched off (only after the right password), `422` malformed body, `429` too many failures |
+| POST | `/auth/forgot-password` | none | `202`, always the same message | `422`, `429` more than 3 per address or 10 per client an hour |
+| POST | `/auth/reset-password` | none | `200` message | `400` unknown, used or expired link (one message), `422` short password |
 | GET | `/auth/me` | any | `200` the signed-in user | `401` |
 | GET | `/users` | ADMIN | `200` users sorted by name (never the hash) | `401`, `403` |
-| POST | `/users` | ADMIN | `201` the new user | `409` name taken, `422` invalid, `401`, `403` |
+| POST | `/users` | ADMIN | `201` the new user (optional `email`) | `409` name or email taken, `422` invalid, `401`, `403` |
+| PATCH | `/users/{username}` | ADMIN | `200` the user with the new `{"role": ...}` | `400` your own account, `404`, `422`, `401`, `403` |
 | DELETE | `/users/{username}` | ADMIN | `204` | `400` deleting yourself, `404`, `401`, `403` |
 | PATCH | `/sensors/{sensor_id}` | OPERATOR | `200` the updated sensor | `404`, `422`, `401`, `403` |
 
@@ -59,3 +62,14 @@ Every `401` carries `WWW-Authenticate: Bearer`.
 - **Dashboard:** keeps the login response in `sessionStorage` (gone when the tab closes) and sends the token with every request. On any `401` it signs out and shows the reason. Edit controls are only shown to OPERATOR and above, but the API enforces every permission itself.
 
 **Rate limiting** (Phase 15g): 5 failed logins for a username (from anywhere), or 20 from one client, within 5 minutes → `429 {"detail": "Too many failed attempts, try again later"}` with `Retry-After`. A correct password then also gets `429`, so guessing can't continue. A successful login clears the username's count. Behind the dashboard's nginx, the client is the address nginx reports (`X-Real-IP`, trusted only with `TRUST_PROXY=1`). Tunable with `LOGIN_MAX_FAILURES_PER_USER`, `LOGIN_MAX_FAILURES_PER_CLIENT` and `LOGIN_FAILURE_WINDOW`. See [security.md](../security/security.md).
+
+## Accounts and recovery (Phase 19)
+
+- **Accounts are created by an administrator** (Users screen, `POST /users`). There is no public sign-up: on a home system, only the owner decides who gets in. An account can have an **email**; with one, the new user gets a welcome email with their username and the sign-in address, never the password.
+- **Roles** are changed in place (`PATCH /users/{username}`), effective on the user's next request. Nobody can change or delete their own account, so the last admin can't lock everyone out.
+- **Forgot username or password** (`POST /auth/forgot-password`): one email to the account's address with the **username** and a **one-time reset link** (`https://<dashboard>/?reset=<token>`), valid 30 minutes (`RESET_MINUTES`). The answer is identical for unknown addresses, and the email is sent in the background, so neither the text nor the timing tells whether an address has an account.
+- **Reset** (`POST /auth/reset-password`): sets the new password, uses up the link, lifts a login lock-out, emails the owner that the password changed, and **ends every existing session**: tokens issued before the change get `401` "Session ended: the password was changed".
+- **Stored safely:** only the SHA-256 of a reset token is kept (`password_resets.token_hash`), so a database copy can't be used to reset anyone's password. A new request cancels the previous link. Neither the token nor the email body is logged.
+- **Email** goes through `SMTP_HOST` (Compose: Mailpit, a local inbox at http://localhost:8025; set a real server in `.env`). A mail server that is down is logged and never breaks the request. With `APP_ENV=production` the API refuses to start without `SMTP_HOST` and an `https://` `APP_BASE_URL`.
+- **Account status:** every account is `ACTIVE`. The column exists so an account can be switched off later; a switched-off account can't sign in (`403`, only after the right password), its tokens stop working, and it gets no recovery email.
+- **Upgrade:** existing databases get `users.email`, `status` and `password_changed_at` from `database/migrations.py` on the next `init-db`; every existing account stays `ACTIVE`.

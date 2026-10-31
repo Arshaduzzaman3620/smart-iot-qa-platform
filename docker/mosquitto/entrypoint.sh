@@ -4,6 +4,24 @@
 # Passwords never live in the repository; the file is rebuilt on every start, so changing a
 # password in .env and restarting the broker is enough.
 set -eu
+
+# Production (APP_ENV=production): port 8883 faces the internet, so refuse the dev passwords from
+# compose.yaml, and never create the test account, which may read and write every topic.
+if [ "${APP_ENV:-}" = "production" ]; then
+    bad=0
+    for pair in SENSOR_MQTT_PASSWORD:sensor-dev-password RECEIVER_MQTT_PASSWORD:receiver-dev-password \
+                API_MQTT_PASSWORD:api-dev-password; do
+        name=${pair%%:*}
+        eval "value=\${$name:-}"
+        if [ -z "$value" ] || [ "$value" = "${pair#*:}" ]; then
+            echo "APP_ENV=production: $name is empty or still the development default" >&2
+            bad=1
+        fi
+    done
+    [ "$bad" = 0 ] || exit 1
+    QA_MQTT_PASSWORD=""
+fi
+
 FILE=/mosquitto/data/passwd
 rm -f "$FILE"
 touch "$FILE"

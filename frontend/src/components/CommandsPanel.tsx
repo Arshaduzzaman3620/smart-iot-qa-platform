@@ -3,6 +3,9 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, AuthError, fetchCommands, sendCommand } from "../api";
 import { formatRelative } from "../format";
 import type { Command, CommandName } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { PulseIcon, RestartIcon } from "./Icons";
+import { useToast } from "./Toast";
 
 const HISTORY_ROWS = 10;
 // While a command is still SENT, check for its outcome this often.
@@ -25,6 +28,8 @@ export function CommandsPanel({ sensorId, now, canSend, onAuthError }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const toast = useToast();
   const pending = commands?.some((c) => c.status === "SENT") ?? false;
 
   useEffect(() => {
@@ -51,6 +56,8 @@ export function CommandsPanel({ sensorId, now, canSend, onAuthError }: Props) {
     setError(null);
     try {
       await sendCommand(sensorId, command, seconds);
+      toast(command === "SET_INTERVAL" ? `Interval ${seconds} s sent to ${sensorId}`
+            : `${command === "RESTART" ? "Restart" : "Reading request"} sent to ${sensorId}`);
     } catch (err) {
       if (err instanceof AuthError) return onAuthError(err);
       setError(err instanceof ApiError ? err.message : "Unexpected error");
@@ -71,10 +78,11 @@ export function CommandsPanel({ sensorId, now, canSend, onAuthError }: Props) {
       {canSend && (
         <div className="edit">
           <button type="button" disabled={busy} onClick={() => send("REQUEST_TELEMETRY")} data-testid="cmd-request">
-            Request reading
+            <PulseIcon size={16} /> Request reading
           </button>
-          <button type="button" disabled={busy} onClick={() => send("RESTART")} data-testid="cmd-restart">
-            Restart
+          {/* A restart takes the device offline for a few seconds: ask first. */}
+          <button type="button" disabled={busy} onClick={() => setConfirmRestart(true)} data-testid="cmd-restart">
+            <RestartIcon size={16} /> Restart
           </button>
           <form className="inline" onSubmit={submitInterval}>
             <label>
@@ -86,6 +94,10 @@ export function CommandsPanel({ sensorId, now, canSend, onAuthError }: Props) {
           </form>
         </div>
       )}
+      <ConfirmDialog open={confirmRestart} title={`Restart ${sensorId}?`}
+                     message="The device goes offline for a few seconds and misses readings meanwhile."
+                     confirmLabel="Restart device" onCancel={() => setConfirmRestart(false)}
+                     onConfirm={() => { setConfirmRestart(false); send("RESTART"); }} />
       {error && <div role="alert" className="error" data-testid="cmd-error">{error}</div>}
       {commands && commands.length === 0 && <p className="meta" data-testid="commands-empty">No commands yet.</p>}
       {commands && commands.length > 0 && (

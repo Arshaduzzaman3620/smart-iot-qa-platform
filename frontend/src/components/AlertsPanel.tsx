@@ -1,5 +1,6 @@
 import { formatRelative } from "../format";
 import type { Alert } from "../types";
+import { BellIcon, CheckIcon } from "./Icons";
 
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, WARNING: 1 };
 
@@ -11,8 +12,8 @@ interface Props {
 export function AlertsPanel({ alerts, now }: Props) {
   if (alerts.length === 0) {
     return (
-      <p className="meta alerts-none" data-testid="alerts-none">
-        No active alerts.
+      <p className="alerts-none" data-testid="alerts-none">
+        <CheckIcon />No active alerts.
       </p>
     );
   }
@@ -22,10 +23,10 @@ export function AlertsPanel({ alerts, now }: Props) {
 
   return (
     <section className="alerts" aria-labelledby="alerts-heading" data-testid="alerts-panel">
-      <h2 id="alerts-heading">Active alerts ({alerts.length})</h2>
+      <h2 id="alerts-heading"><BellIcon size={18} />Active alerts ({alerts.length})</h2>
       <ul>
         {sorted.map((alert) => (
-          <li key={alert.id} data-testid={`alert-${alert.id}`}>
+          <li key={alert.id} data-testid={`alert-${alert.id}`} className={`alert-item sev-${alert.severity.toLowerCase()}`}>
             <span data-testid="alert-severity" className={`badge badge-${alert.severity.toLowerCase()}`}>
               {alert.severity}
             </span>

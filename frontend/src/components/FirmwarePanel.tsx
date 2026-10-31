@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, AuthError, fetchFirmware, fetchFirmwareUpdates, startFirmwareUpdate } from "../api";
 import { formatRelative } from "../format";
 import type { Firmware, FirmwareUpdate, Sensor } from "../types";
+import { useToast } from "./Toast";
 
 const HISTORY_ROWS = 5;
 const POLL_MS = 1000; // while an update is in progress
@@ -23,6 +24,7 @@ export function FirmwarePanel({ sensor, now, canUpdate, onAuthError }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const toast = useToast();
   const running = updates?.some((u) => !FINAL.includes(u.status)) ?? false;
 
   useEffect(() => {
@@ -53,7 +55,8 @@ export function FirmwarePanel({ sensor, now, canUpdate, onAuthError }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await startFirmwareUpdate(sensor.sensor_id, Number(choice));
+      const update = await startFirmwareUpdate(sensor.sensor_id, Number(choice));
+      toast(`Updating ${sensor.sensor_id} to ${update.version}`);
     } catch (err) {
       if (err instanceof AuthError) return onAuthError(err);
       setError(err instanceof ApiError ? err.message : "Unexpected error");

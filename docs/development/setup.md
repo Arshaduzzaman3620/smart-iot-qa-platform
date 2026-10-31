@@ -15,6 +15,7 @@ docker compose up -d --build        # broker, MySQL, schema, receiver, API, simu
 | Dashboard | **https://localhost:8443** (sign in as `admin` / `admin-dev-password`). http://localhost:8080 redirects there. |
 | API + Swagger UI | https://localhost:8443/api/docs, or plain http://localhost:8000/docs from this machine only |
 | MQTT broker | TLS on port `8883` (all interfaces); plain `127.0.0.1:1883` for local tools |
+| Mailpit (emails the API sends: welcome, password reset) | http://localhost:8025 |
 | MySQL | `127.0.0.1:3307` (user `smart_iot_user`, password `changeme`), TLS required: e.g. `--ssl-ca=certs/ca.crt` |
 
 The first start creates `./certs` (a private CA and a server certificate). Trust `certs/ca.crt` once so the browser accepts the dashboard: see [tls.md](../security/tls.md#trust-the-ca-in-your-browser-once).
