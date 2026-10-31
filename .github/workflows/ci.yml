@@ -1,7 +1,9 @@
 name: CI
 
+# Pull requests, and main after a merge. Not every branch push: that ran each PR twice.
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
