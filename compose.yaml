@@ -83,6 +83,7 @@ services:
       OFFLINE_CHECK_INTERVAL: ${OFFLINE_CHECK_INTERVAL:-5}
       RECEIVER_BATCH_MAX: ${RECEIVER_BATCH_MAX:-200}
       COMMAND_TIMEOUT: ${COMMAND_TIMEOUT:-30}
+      FOTA_TIMEOUT: ${FOTA_TIMEOUT:-300}
     depends_on:
       mqtt:
         condition: service_started
@@ -125,6 +126,10 @@ services:
       MQTT_PORT: "1883"
       SENSOR_COUNT: ${SENSOR_COUNT:-5}
       SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
+      # Where sensors download firmware from (the URL path comes in the update message).
+      API_BASE_URL: http://api:8000
+      # Inject a FOTA failure on every update: none / download / corrupt / install (docs/architecture/fota.md)
+      FOTA_FAILURE: ${FOTA_FAILURE:-none}
     depends_on:
       - mqtt
       - receiver

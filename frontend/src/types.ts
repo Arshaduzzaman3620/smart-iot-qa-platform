@@ -71,3 +71,30 @@ export interface Command {
   created_at: string;
   completed_at: string | null;
 }
+
+export interface Firmware {
+  id: number;
+  version: string;
+  filename: string;
+  checksum: string; // SHA-256, hex
+  size: number; // bytes
+  uploaded_by: string;
+  created_at: string;
+}
+
+export type FirmwareUpdateStatus =
+  | "REQUESTED" | "DOWNLOADING" | "VERIFYING" | "INSTALLING" | "SUCCEEDED" | "FAILED" | "TIMED_OUT";
+
+export interface FirmwareUpdate {
+  id: number;
+  sensor_id: string;
+  firmware_id: number;
+  version: string;
+  from_version: string | null;
+  status: FirmwareUpdateStatus;
+  error_message: string | null;
+  requested_by: string;
+  started_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}

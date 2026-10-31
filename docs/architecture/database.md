@@ -28,11 +28,15 @@ Roles: `ADMIN`, `OPERATOR`, `VIEWER`. `username` is unique. `password_hash` is a
 
 ## firmware
 
-`id, version, filename, checksum, size, created_at`
+`id, version, filename, checksum, size, content, uploaded_by, created_at`
+
+`version` is unique. `checksum` is SHA-256 hex. `content` is the image (`MEDIUMBLOB`, uploads capped at 1 MiB), loaded only for downloads (deferred).
 
 ## firmware_updates
 
-`id, sensor_id, firmware_id, status, started_at, completed_at, error_message`
+`id, sensor_id, firmware_id, from_version, status, error_message, requested_by, started_at, updated_at, completed_at`
+
+Cascade-deleted with the sensor. A firmware row can't be deleted while updates reference it. Statuses and failure modes: [fota.md](fota.md).
 
 ## Relationships
 
@@ -45,7 +49,7 @@ sensors
 
 ## Implementation status
 
-`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), `users` since Phase 15c, and `commands` since 15d. `firmware` and `firmware_updates` arrive with FOTA.
+`sensors`, `telemetry`, and `alerts` are implemented as SQLAlchemy models in [database/models.py](../../database/models.py) (Phase 8), `users` since Phase 15c, `commands` since 15d, and `firmware` / `firmware_updates` since 15e.
 
 Implementation notes:
 

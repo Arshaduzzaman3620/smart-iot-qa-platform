@@ -34,9 +34,10 @@ def open_signed_in(stack, test_users, page):
 
 
 @pytest.fixture
-def simulated_sensor(stack, tmp_path):
-    """The real simulator running one sensor with a test-only ID (TEST-SIMxxxx-001), slow schedule so
-    the test decides when readings happen. Yields (sensor_id, log reader)."""
+def start_simulator(stack, tmp_path):
+    """start_simulator(**env) runs the real simulator with one sensor under a test-only ID
+    (TEST-SIMxxxxxx-001) on a slow schedule, so the test decides when readings happen.
+    Returns (sensor_id, log reader). Stopped, and its retained status cleared, afterwards."""
     import os
     import subprocess
     import sys
@@ -46,32 +47,43 @@ def simulated_sensor(stack, tmp_path):
 
     from helpers import MQTT_HOST, MQTT_PORT, ROOT, wait_until
 
-    prefix = f"TEST-SIM{uuid.uuid4().hex[:6].upper()}-"
-    sensor_id = f"{prefix}001"
-    log_path = tmp_path / "simulator.log"
-    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "SENSOR_COUNT": "1",
-           "SENSOR_INTERVAL": "60", "SENSOR_ID_PREFIX": prefix, "RESTART_SECONDS": "1"}
-    with open(log_path, "w", encoding="utf-8") as log:
-        process = subprocess.Popen([sys.executable, "main.py"], cwd=ROOT / "sensor-simulator", stdout=log,
-                                   stderr=subprocess.STDOUT, env=env)
+    started = []
 
-    def read() -> str:
-        return log_path.read_text(encoding="utf-8")
+    def start(**extra_env):
+        prefix = f"TEST-SIM{uuid.uuid4().hex[:6].upper()}-"
+        sensor_id = f"{prefix}001"
+        log_path = tmp_path / f"simulator-{sensor_id}.log"
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "SENSOR_COUNT": "1",
+               "SENSOR_INTERVAL": "60", "SENSOR_ID_PREFIX": prefix, "RESTART_SECONDS": "1",
+               "API_BASE_URL": API_URL, "FOTA_STEP_SECONDS": "0.2", **extra_env}
+        with open(log_path, "w", encoding="utf-8") as log:
+            process = subprocess.Popen([sys.executable, "main.py"], cwd=ROOT / "sensor-simulator", stdout=log,
+                                       stderr=subprocess.STDOUT, env=env)
+        started.append((process, sensor_id))
 
-    try:
-        wait_until(lambda: "Starting 1 sensor(s)" in read() and f"Telemetry sent: {{'sensor_id': '{sensor_id}'" in read(),
-                   timeout=15)
-        yield sensor_id, read
-    finally:
+        def read() -> str:
+            return log_path.read_text(encoding="utf-8")
+
+        wait_until(lambda: f"Telemetry sent: {{'sensor_id': '{sensor_id}'" in read(), timeout=15)
+        return sensor_id, read
+
+    yield start
+
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.connect(MQTT_HOST, MQTT_PORT)
+    client.loop_start()
+    for process, sensor_id in started:
         process.terminate()
         process.wait(timeout=10)
         # Clear its retained status, so the broker doesn't keep announcing a sensor that is gone.
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        client.connect(MQTT_HOST, MQTT_PORT)
-        client.loop_start()
         client.publish(f"iot/sensors/{sensor_id}/status", b"", qos=1, retain=True).wait_for_publish(5)
-        client.loop_stop()
-        client.disconnect()
+    client.loop_stop()
+    client.disconnect()
+
+
+@pytest.fixture
+def simulated_sensor(start_simulator):
+    return start_simulator()
 
 
 @pytest.fixture

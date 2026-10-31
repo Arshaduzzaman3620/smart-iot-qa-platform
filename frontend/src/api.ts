@@ -1,4 +1,4 @@
-import type { Alert, Command, CommandName, Sensor, Session, Telemetry } from "./types";
+import type { Alert, Command, CommandName, Firmware, FirmwareUpdate, Sensor, Session, Telemetry } from "./types";
 
 const API_BASE = "/api";
 
@@ -15,7 +15,7 @@ export function setToken(next: string | null): void {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   let response: Response;
   try {
@@ -80,5 +80,29 @@ export function sendCommand(sensorId: string, command: CommandName, interval?: n
   return request<Command>(`/sensors/${encodeURIComponent(sensorId)}/commands`, {
     method: "POST",
     body: JSON.stringify(command === "SET_INTERVAL" ? { command, interval } : { command }),
+  });
+}
+
+export function fetchFirmware(signal?: AbortSignal): Promise<Firmware[]> {
+  return request<Firmware[]>("/firmware", { signal });
+}
+
+export function uploadFirmware(version: string, file: File): Promise<Firmware> {
+  const query = new URLSearchParams({ version, filename: file.name });
+  return request<Firmware>(`/firmware?${query}`, {
+    method: "POST",
+    body: file,
+    headers: { "Content-Type": "application/octet-stream" },
+  });
+}
+
+export function fetchFirmwareUpdates(sensorId: string, limit: number, signal?: AbortSignal): Promise<FirmwareUpdate[]> {
+  return request<FirmwareUpdate[]>(`/sensors/${encodeURIComponent(sensorId)}/firmware-updates?limit=${limit}`, { signal });
+}
+
+export function startFirmwareUpdate(sensorId: string, firmwareId: number): Promise<FirmwareUpdate> {
+  return request<FirmwareUpdate>(`/sensors/${encodeURIComponent(sensorId)}/firmware-updates`, {
+    method: "POST",
+    body: JSON.stringify({ firmware_id: firmwareId }),
   });
 }

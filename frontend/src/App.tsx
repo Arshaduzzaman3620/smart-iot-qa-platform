@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, AuthError, fetchActiveAlerts, fetchSensors, setToken } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
+import { FirmwareLibrary } from "./components/FirmwareLibrary";
 import { LoginForm } from "./components/LoginForm";
 import { SensorDetails } from "./components/SensorDetails";
 import { SensorTable } from "./components/SensorTable";
@@ -148,6 +149,8 @@ function Dashboard({ session, onAuthError }: DashboardProps) {
       ) : (
         <SensorTable sensors={sensors} now={now} selected={selected} onSelect={setSelected} />
       )}
+
+      <FirmwareLibrary now={now} canUpload={hasRole(session, "ADMIN")} onAuthError={handleAuthError} />
     </>
   );
 }

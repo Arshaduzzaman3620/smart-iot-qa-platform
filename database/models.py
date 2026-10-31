@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Double, ForeignKey, Index, String, func
+from sqlalchemy import BigInteger, DateTime, Double, ForeignKey, Index, Integer, LargeBinary, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Schema per docs/architecture/database.md. Tables arrive with their features: sensors, telemetry,
-# alerts (Phase 8), users (15c), commands (15d).
+# alerts (Phase 8), users (15c), commands (15d), firmware / firmware_updates (15e).
 
 
 class Base(DeclarativeBase):
@@ -120,3 +120,45 @@ class Command(Base):
     requested_by: Mapped[str] = mapped_column(String(50), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class Firmware(Base):
+    """An uploaded firmware image (simulated). Small, so the bytes live in MySQL; sensors download
+    them from the API with a short-lived token (docs/architecture/fota.md)."""
+
+    __tablename__ = "firmware"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    version: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    filename: Mapped[str] = mapped_column(String(100), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256, hex
+    size: Mapped[int] = mapped_column(Integer, nullable=False)  # bytes
+    # MEDIUMBLOB (up to 16 MiB) on MySQL; uploads are capped far below that.
+    content: Mapped[bytes] = mapped_column(LargeBinary(length=2**24 - 1), nullable=False, deferred=True)
+    uploaded_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class FirmwareUpdate(Base):
+    """One firmware update of one sensor: REQUESTED -> DOWNLOADING -> VERIFYING -> INSTALLING ->
+    SUCCEEDED, or FAILED / TIMED_OUT at any point."""
+
+    __tablename__ = "firmware_updates"
+    __table_args__ = (Index("ix_fw_updates_sensor_started", "sensor_id", "started_at"),
+                      Index("ix_fw_updates_status_started", "status", "started_at"))
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    sensor_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False
+    )
+    firmware_id: Mapped[int] = mapped_column(ForeignKey("firmware.id", ondelete="RESTRICT"), nullable=False)
+    from_version: Mapped[str | None] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="REQUESTED")
+    error_message: Mapped[str | None] = mapped_column(String(255))
+    requested_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(),
+                                                 onupdate=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    firmware: Mapped[Firmware] = relationship()
