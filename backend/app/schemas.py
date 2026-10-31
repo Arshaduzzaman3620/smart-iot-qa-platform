@@ -1,8 +1,10 @@
+import json
 from datetime import datetime, timezone
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# Response models only -- the API is read-only at this phase.
+Role = Literal["VIEWER", "OPERATOR", "ADMIN"]
 
 
 class _UTCModel(BaseModel):
@@ -65,3 +67,103 @@ class AlertOut(_UTCModel):
 class HealthOut(BaseModel):
     status: str
     database: str
+
+
+# ---- auth and users (Phase 15c) -------------------------------------------------------------
+
+class _StrictIn(BaseModel):
+    # Unknown fields are an error, not silently ignored (a typo like "rol" must not pass).
+    model_config = ConfigDict(extra="forbid")
+
+
+class LoginIn(_StrictIn):
+    # Loose on purpose: login must not reveal the password policy.
+    username: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class UserOut(_UTCModel):
+    username: str
+    role: str
+    created_at: datetime
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+    user: UserOut
+
+
+class UserCreateIn(_StrictIn):
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=128)
+    role: Role = "VIEWER"
+
+
+def _clean_text(value: str | None) -> str | None:
+    """Trim; empty means "clear it"; control characters are rejected."""
+    if value is None:
+        return None
+    value = value.strip()
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ValueError("must not contain control characters")
+    return value or None
+
+
+class SensorUpdateIn(_StrictIn):
+    """PATCH /sensors/{id}: only the fields that are sent are changed."""
+
+    name: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=100)
+
+    @field_validator("name", "location")
+    @classmethod
+    def _clean(cls, value):
+        return _clean_text(value)
+
+    @model_validator(mode="after")
+    def _not_empty(self):
+        if not self.model_fields_set:
+            raise ValueError("send at least one of: name, location")
+        return self
+
+
+# ---- sensor commands (Phase 15d) ------------------------------------------------------------
+
+CommandName = Literal["RESTART", "REQUEST_TELEMETRY", "SET_INTERVAL"]
+MIN_INTERVAL, MAX_INTERVAL = 1, 3600  # seconds between readings
+
+
+class CommandIn(_StrictIn):
+    command: CommandName
+    # Only for SET_INTERVAL. A whole number of seconds; strict, so "10" or 10.5 are rejected.
+    interval: int | None = Field(None, ge=MIN_INTERVAL, le=MAX_INTERVAL, strict=True)
+
+    @model_validator(mode="after")
+    def _params_match_command(self):
+        if self.command == "SET_INTERVAL" and self.interval is None:
+            raise ValueError("SET_INTERVAL needs interval (seconds)")
+        if self.command != "SET_INTERVAL" and self.interval is not None:
+            raise ValueError(f"{self.command} takes no interval")
+        return self
+
+    def params(self) -> dict:
+        return {"interval": self.interval} if self.command == "SET_INTERVAL" else {}
+
+
+class CommandOut(_UTCModel):
+    id: int
+    sensor_id: str
+    command: str
+    params: dict
+    status: str  # SENT / SUCCEEDED / FAILED / TIMED_OUT
+    message: str | None
+    requested_by: str
+    created_at: datetime
+    completed_at: datetime | None
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _parse_params(cls, value):
+        return json.loads(value) if isinstance(value, str) else (value or {})

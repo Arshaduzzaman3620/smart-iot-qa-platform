@@ -5,7 +5,7 @@ The pipeline was scaled from 1 to **5 → 10 → 50 → 100** simulated sensors 
 ## How to reproduce
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d --wait
+docker compose up -d --wait mqtt mysql    # infrastructure only
 python -m database.init_db
 python -m backend.app.main                 # optional: enables the GET /sensors timing
 # stop any receiver you started by hand -- the script runs its own
@@ -35,7 +35,7 @@ The dashboard rendered all 100 sensors, each with distinct readings, refreshing 
 
 - **The receiver's ceiling is about 65–75 msg/s** (one transaction per message, single-threaded). That is **~3.3× the 100-sensor target** of 20 msg/s.
 - Above the ceiling, **nothing is lost**: messages queue, and the receiver drains the backlog after the load stops (14 s here). The cost is latency, which grows for as long as the overload lasts.
-- Raising the ceiling (batched inserts, a writer thread) is performance work for Phase 15.
+- Raising the ceiling (batched inserts, a writer thread) is performance work for Phase 15. Done in Phase 15b, see below.
 
 ## Re-measured in Phase 15a (2026-10-25)
 
@@ -47,6 +47,23 @@ On the same machine one day later, `TelemetryRepository.save` took 18–39 ms at
 | Phase 15a | 1 of 7 | max latency 24–39 s | 0 |
 
 No reading was ever lost; they only arrived late. With one commit (two disk flushes) per message, the receiver has too little headroom at 20 msg/s when flushes are slow. Batched writes are Phase 15b.
+
+## Phase 15b: batched writes (2026-10-25)
+
+The receiver now validates on the MQTT thread and hands messages to one writer thread. That thread stores whatever is waiting (up to `RECEIVER_BATCH_MAX`, default 200) in one transaction with a single commit. Same machine, same day:
+
+| Load | Before (15a) | After (15b) |
+|---|---|---|
+| 100 sensors / 5 s (20 msg/s) | PASS once that morning; 1 of 7 the day before | **3 of 3 PASS**, max latency 1–2 s |
+| 100 sensors / 1 s, 30 s (100 msg/s offered) | 33 msg/s stored, max latency 72 s, backlog drained in 58 s | **95 msg/s** (all offered), max latency 1 s, **PASS** |
+| 100 sensors / 1 s, 60 s | | 91 msg/s, max latency 20 s, FAIL (just under the ceiling) |
+| 250 sensors / 1 s (250 msg/s offered) | | 96 msg/s, max latency 59 s, 0 missing |
+| 500 sensors / 1 s (500 msg/s offered) | | 81 msg/s, max latency 124 s, 0 missing |
+
+- **New ceiling: about 90–95 msg/s**, 3× the old 33 msg/s and about 4.5× the 100-sensor target. Above it, nothing is lost, but latency grows, as before. A profile of a 200-message batch shows the remaining time is MySQL executing the four statements per message (~2.5 ms each). Collapsing statements across messages would either miss brief alert spikes inside a batch or race with the offline check, so it was not done.
+- **No added latency at low load:** the writer never waits to fill a batch. A lone message is a batch of one.
+- **Failure isolation:** if a batch fails (a message MySQL rejects, a deadlock, the DB going away), its messages are retried one by one, so only the bad one is lost.
+- **Graceful stop:** Ctrl+C, SIGTERM or Ctrl+Break disconnects from the broker, then stores every message already accepted. Verified by stopping the receiver after 300 of 2000 burst messages were stored: all 2000 reached MySQL, and the receiver exited with code 0 after a 22 s drain. In Docker (Phase 16), `stop_grace_period` must allow for that, because `docker stop` kills after 10 s by default.
 
 ## Defects found and fixed while scaling
 

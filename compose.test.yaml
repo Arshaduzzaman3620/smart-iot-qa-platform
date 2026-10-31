@@ -1,0 +1,58 @@
+# The full automated test suite in Docker, on its own broker and a throwaway in-memory MySQL.
+# Separate from compose.yaml (own project, no host ports), so it can run while the dev stack is up
+# and never touches the dev database.
+#
+#   docker compose -f compose.test.yaml run --rm --build tests                  # everything
+#   docker compose -f compose.test.yaml run --rm tests pytest tests/unit -q      # any pytest args
+#   docker compose -f compose.test.yaml down                                    # stop broker + MySQL
+name: smart-iot-test
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: smart_iot
+      MYSQL_USER: smart_iot_user
+      MYSQL_PASSWORD: test-only
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      # Over TCP (127.0.0.1), as the app user, against the app database. During first-start setup
+      # the image runs a temporary server reachable only through the local socket, so a socket
+      # ping (-h localhost) reported healthy too early and init-db was refused (CI, 2026-10-29).
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\" > /dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  tests:
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: tests
+    image: smart-iot/tests:local
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: smart_iot
+      MYSQL_USER: smart_iot_user
+      MYSQL_PASSWORD: test-only
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      # A missing service is a failure here, not a skip.
+      REQUIRE_SERVICES: "1"
+      INIT_DB_WAIT: "60"
+    # Create the schema, then run whatever command was given (default: pytest).
+    entrypoint: ["sh", "-c", "python -m database.init_db && exec \"$$@\"", "--"]
+    command: ["pytest"]
+    depends_on:
+      mqtt:
+        condition: service_started
+      mysql:
+        condition: service_healthy

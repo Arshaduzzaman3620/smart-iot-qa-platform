@@ -1,0 +1,144 @@
+# The whole platform in Docker: broker, MySQL, receiver, API, simulator and dashboard.
+# Only Docker is needed on the machine (macOS, Windows or Linux).
+#
+#   docker compose up -d --build     dashboard: http://localhost:8080   API: http://localhost:8000/docs
+#   docker compose logs -f receiver
+#   docker compose down              (add -v to also delete the database)
+#
+# Settings come from .env in this folder if it exists (see .env.example); every one has a default.
+# Run only the infrastructure, for Python run on the host:  docker compose up -d mqtt mysql
+name: smart-iot
+
+x-python: &python
+  build:
+    context: .
+    dockerfile: docker/python.Dockerfile
+    target: app
+  image: smart-iot/python:local
+  restart: unless-stopped
+
+# Inside the Compose network the services reach each other by name, whatever .env says for the host.
+x-app-env: &app-env
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-smart_iot}
+  MYSQL_USER: ${MYSQL_USER:-smart_iot_user}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+  MQTT_HOST: mqtt
+  MQTT_PORT: "1883"
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      # The official image creates this database and user on first start.
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-smart_iot}
+      MYSQL_USER: ${MYSQL_USER:-smart_iot_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+      # Root is never used by the app, so it gets a random password nobody needs to know.
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    ports:
+      # Host port 3307 so it doesn't collide with a locally installed MySQL on 3306.
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # Over TCP (127.0.0.1), as the app user, against the app database. During first-start setup
+      # the image runs a temporary server reachable only through the local socket, so a socket
+      # ping (-h localhost) reported healthy too early and init-db was refused (CI, 2026-10-29).
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 3306 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\" > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # Creates or upgrades the schema, then exits. The receiver and API wait for it.
+  init-db:
+    <<: *python
+    command: ["python", "-m", "database.init_db"]
+    environment:
+      <<: *app-env
+      # Second safety net behind the healthcheck: keep retrying while MySQL still refuses connections.
+      INIT_DB_WAIT: "60"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  receiver:
+    <<: *python
+    working_dir: /app/receiver
+    command: ["python", "main.py"]
+    environment:
+      <<: *app-env
+      OFFLINE_TIMEOUT: ${OFFLINE_TIMEOUT:-30}
+      OFFLINE_CHECK_INTERVAL: ${OFFLINE_CHECK_INTERVAL:-5}
+      RECEIVER_BATCH_MAX: ${RECEIVER_BATCH_MAX:-200}
+      COMMAND_TIMEOUT: ${COMMAND_TIMEOUT:-30}
+    depends_on:
+      mqtt:
+        condition: service_started
+      init-db:
+        condition: service_completed_successfully
+    # On stop the receiver stores every message it already accepted; a backlog can take ~20 s
+    # (docs/testing/scale-results.md). Docker's default of 10 s would kill it mid-drain.
+    stop_grace_period: 60s
+
+  api:
+    <<: *python
+    command: ["python", "-m", "backend.app.main"]
+    environment:
+      <<: *app-env
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      # First admin, created only while the users table is empty. Dev default; set your own in .env.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
+      # Empty = a random secret per API start (everyone signs in again after a restart).
+      JWT_SECRET: ${JWT_SECRET:-}
+      TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  simulator:
+    <<: *python
+    working_dir: /app/sensor-simulator
+    command: ["python", "main.py"]
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      SENSOR_COUNT: ${SENSOR_COUNT:-5}
+      SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
+    depends_on:
+      - mqtt
+      - receiver
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: smart-iot/dashboard:local
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

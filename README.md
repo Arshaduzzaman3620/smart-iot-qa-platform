@@ -8,6 +8,20 @@ A fully simulated, fictional IoT sensor platform built to learn and demonstrate 
 
 A virtual IoT sensor sends fictional telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver service validates and stores that data in MySQL. A FastAPI backend exposes it over REST. A web dashboard displays it. Every layer of that pipeline is covered by automated tests — unit, API, MQTT, integration, end-to-end, performance, security, and reliability — built up one phase at a time.
 
+## Quick start
+
+The only requirement is [Docker Desktop](https://www.docker.com/products/docker-desktop/). The same commands work on macOS, Windows and Linux.
+
+```bash
+docker compose up -d --build                                  # the whole platform
+# dashboard: http://localhost:8080    API docs: http://localhost:8000/docs
+
+docker compose -f compose.test.yaml run --rm --build tests     # the whole test suite
+docker compose down                                           # stop
+```
+
+Running services with Python and Node on the host instead, plus troubleshooting: [docs/development/setup.md](docs/development/setup.md).
+
 ## Architecture
 
 ```text
@@ -64,19 +78,22 @@ Automated Testing (Playwright / pytest / k6)
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **Phase 15a — alerts and offline detection** is complete: threshold alerts, automatic OFFLINE status for silent sensors, `/alerts` API, and an alerts panel on the dashboard, with 221 automated tests. Phase 15 continues with authentication, commands, FOTA, failure injection, performance, security, and reliability. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details.
+Currently: **Phase 15d — sensor commands** is complete: operators restart sensors, request readings and change intervals from the dashboard, through the API and MQTT, with each command's outcome tracked. Before it: JWT sign-in with VIEWER / OPERATOR / ADMIN roles (15c), and the whole platform and test suite running in Docker on any OS, with CI. 490 automated tests. Phase 15 continues with FOTA, reliability, security and performance. See [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Documentation
 
+- [Development setup](docs/development/setup.md)
 - [Requirements](docs/requirements/requirements.md)
 - [Architecture](docs/architecture/architecture.md)
 - [Sensor behavior](docs/architecture/sensor-behavior.md)
 - [MQTT topic design](docs/mqtt/topics.md)
 - [Database structure](docs/architecture/database.md)
 - [REST API](docs/api/endpoints.md)
+- [Authentication and roles](docs/api/auth.md)
 - [Web dashboard](docs/frontend/dashboard.md)
 - [Testing strategy](docs/testing/strategy.md)
 - [Manual E2E verification](docs/testing/e2e-manual-verification.md)
 - [Test automation](docs/testing/automation.md)
 - [Multi-sensor scale results](docs/testing/scale-results.md)
 - [Alerts and offline detection](docs/architecture/alerts.md)
+- [Sensor commands](docs/architecture/commands.md)

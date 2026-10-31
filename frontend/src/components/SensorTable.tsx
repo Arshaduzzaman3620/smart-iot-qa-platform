@@ -6,9 +6,11 @@ const LOW_BATTERY = 20;
 interface Props {
   sensors: Sensor[];
   now: number;
+  selected: string | null;
+  onSelect: (sensorId: string) => void;
 }
 
-export function SensorTable({ sensors, now }: Props) {
+export function SensorTable({ sensors, now, selected, onSelect }: Props) {
   if (sensors.length === 0) {
     return (
       <p className="empty" data-testid="sensors-empty">
@@ -35,8 +37,14 @@ export function SensorTable({ sensors, now }: Props) {
             const t = sensor.latest_telemetry;
             const lowBattery = sensor.battery != null && sensor.battery < LOW_BATTERY;
             return (
-              <tr key={sensor.sensor_id} data-testid={`sensor-row-${sensor.sensor_id}`}>
-                <td data-testid="sensor-id" className="mono">{sensor.sensor_id}</td>
+              <tr key={sensor.sensor_id} data-testid={`sensor-row-${sensor.sensor_id}`}
+                  className={sensor.sensor_id === selected ? "selected" : undefined}>
+                <td className="mono">
+                  <button type="button" className="link mono" data-testid="sensor-id"
+                          aria-pressed={sensor.sensor_id === selected} onClick={() => onSelect(sensor.sensor_id)}>
+                    {sensor.sensor_id}
+                  </button>
+                </td>
                 <td data-testid="temperature" className="num">{formatNumber(t?.temperature, "°C")}</td>
                 <td data-testid="humidity" className="num">{formatNumber(t?.humidity, "%")}</td>
                 <td data-testid="battery" className={lowBattery ? "num low" : "num"}>

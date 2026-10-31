@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 
 from database.models import Alert
 
-from ..deps import get_db
+from ..deps import get_db, require_role
 from ..schemas import AlertOut
 
-router = APIRouter(prefix="/alerts", tags=["alerts"])
+router = APIRouter(prefix="/alerts", tags=["alerts"], dependencies=[Depends(require_role("VIEWER"))])
 
 AlertStatus = Literal["ACTIVE", "RESOLVED"]
 
