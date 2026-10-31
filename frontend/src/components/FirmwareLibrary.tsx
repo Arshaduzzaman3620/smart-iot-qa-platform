@@ -4,6 +4,7 @@ import { ApiError, AuthError, fetchFirmware, uploadFirmware } from "../api";
 import { formatRelative } from "../format";
 import type { Firmware } from "../types";
 import { ChipIcon, UploadIcon } from "./Icons";
+import { useToast } from "./Toast";
 
 const MAX_BYTES = 1024 * 1024; // the API's limit
 
@@ -21,6 +22,7 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,6 +49,7 @@ export function FirmwareLibrary({ now, canUpload, onAuthError }: Props) {
       const safe = new File([file], file.name.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 100));
       const uploaded = await uploadFirmware(version, safe);
       setMessage({ ok: true, text: `Uploaded ${uploaded.version}` });
+      toast(`Firmware ${uploaded.version} uploaded`);
       setVersion("");
       setReload((n) => n + 1);
     } catch (err) {

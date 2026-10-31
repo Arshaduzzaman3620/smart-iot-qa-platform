@@ -67,6 +67,23 @@ export const PinIcon = (p: P) => (
   <Icon {...p}><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" /><circle cx="12" cy="9" r="2.5" /></Icon>
 );
 
+export const MoonIcon = (p: P) => <Icon {...p}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></Icon>;
+export const MonitorIcon = (p: P) => (
+  <Icon {...p}><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></Icon>
+);
+export const SearchIcon = (p: P) => <Icon {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Icon>;
+export const ListIcon = (p: P) => <Icon {...p}><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" /></Icon>;
+export const UsersIcon = (p: P) => (
+  <Icon {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7" />
+    <path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5" /></Icon>
+);
+export const TrashIcon = (p: P) => (
+  <Icon {...p}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Icon>
+);
+export const RestartIcon = (p: P) => <Icon {...p}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Icon>;
+export const PulseIcon = (p: P) => <Icon {...p}><path d="M3 12h4l3-8 4 16 3-8h4" /></Icon>;
+export const PlusIcon = (p: P) => <Icon {...p}><path d="M12 5v14M5 12h14" /></Icon>;
+
 /** The SmartIoT mark: a house with a signal wave. */
 export function Logo({ size = 32 }: P) {
   return (

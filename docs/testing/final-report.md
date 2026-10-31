@@ -6,9 +6,9 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 
 | | |
 |---|---|
-| Automated tests | **733**, in 7 layers, all passing ([inventory](#test-inventory)) |
+| Automated tests | **762**, in 7 layers, all passing ([inventory](#test-inventory)) |
 | Requirements | **11 of 11** functional requirements implemented and covered by tests ([traceability](#requirements-traceability)) |
-| Defects found and fixed | **34** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
+| Defects found and fixed | **39** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
 | Reliability | 0 readings lost, 0 stored twice, through MySQL, broker and receiver outages ([reliability.md](reliability.md)) |
 | Performance | 303 req/s at 300 virtual users with 0 % errors; 100 sensors at 1 reading/s stored with ≤ 1 s latency ([performance.md](performance.md)) |
 | Security | JWT roles, broker auth + ACLs, rate limiting, CSP, dependency audit ([security.md](../security/security.md)) |
@@ -24,7 +24,7 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 | mqtt | 28 | Broker round trip, wildcards, ordering, **ACLs per account**, **TLS listener** (certificate, host name, TLS 1.1 refused) | broker |
 | integration | 56 | Real receiver process: storage, rejection, alerts, offline detection, batching, commands, firmware progress, status messages | broker + MySQL |
 | reliability | 4 | MySQL outage, broker outage, receiver SIGKILL, faulty sensors, via TCP proxies | broker + MySQL |
-| ui | 48 | Every dashboard state in Chromium, API mocked: sign-in, tables, alerts, details, commands, firmware, XSS, phone width | Node |
+| ui | 77 | Every dashboard state in Chromium, API mocked: sign-in, tables, alerts, details, commands, firmware, XSS, phone width | Node |
 | e2e | 14 | Whole stack with the **real simulator**: reading → dashboard, commands, FOTA success and three injected failures, low battery | everything |
 
 One command runs all of them: `docker compose -f compose.test.yaml run --rm --build tests` (about 3½ minutes). Load tests (k6) and the 100-sensor scale check run separately, see [performance.md](performance.md).
@@ -87,6 +87,11 @@ Every defect below was found by a test, a manual check or a measurement while bu
 | 32 | 17 | Certificate generator recognised its own certificates by name, so it would overwrite one from another CA | unit test | check by signature |
 | 33 | 17 | TLS 1.1 test passed because the *client* refused TLS 1.1, never asking the broker | review of a too-easy pass | client offers TLS 1.1; test expects the broker's alert |
 | 34 | 17 | Two test modules named `test_tls` broke collection (same as #26) | full-suite run | renamed `test_broker_tls` |
+| 35 | 18 | The API client parsed every answer as JSON, so a successful `DELETE` (empty `204`) would have shown an error | code review before building the users screen | `204` returns nothing; `test_delete_user_after_confirmation` (fails if the fix is removed) |
+| 36 | 18 | Rooms cards: every comfort label green (CSS order) and content pushed right (`<button>` centring) | screenshot review | tone classes win; `justify-content: stretch` |
+| 37 | 18 | Sidebar highlight could never reach the last sections on a short page | review | bottom-of-page rule; `test_sidebar_marks_the_section_on_screen` |
+| 38 | 18 | Two new tests could pass or fail for the wrong reason (request timing; a user name the form itself rejects) | review before the first run | wait for the request; valid name |
+| 39 | 18 | Three firmware UI tests failed only in the full run: the new users screen asked a real API (left running by the e2e tests) with a fake token, got `401`, and the dashboard rightly signed out | full-suite run | every UI test fakes `/api/users` by default, like alerts and firmware |
 
 ## Known limits
 
@@ -100,6 +105,9 @@ Every defect below was found by a test, a manual check or a measurement while bu
 
 | Check | Result |
 |---|---|
+| **Phase 18 (2026-10-31): full suite** | **762 / 762 passed** (4 min 30 s), after the full run caught defect #39 |
+| **Phase 18: mutation check** | Removing the `204` fix and the restart confirmation failed `test_delete_user_after_confirmation` and `test_restart_asks_first_and_cancel_sends_nothing` |
+| **Phase 18: browser review** | Light, dark and phone screenshots: no console errors or CSP violations, no sideways scroll at 390 px |
 | **Phase 17 (2026-10-31): full suite** | **733 / 733 passed** (3 min 31 s) |
 | **Phase 17: fresh stack with new certificates** | `301` to HTTPS, plain MySQL refused, 5 sensors reporting over HTTPS, 0 error lines |
 | Full suite, run twice in a row | **703 / 703 passed both times** (3 min 22 s, 3 min 27 s), no flaky tests |
@@ -114,7 +122,7 @@ The first `docker compose up` of the fresh install failed instantly once, with i
 
 ```bash
 docker compose up -d --build                                    # the platform, https://localhost:8443 (admin / admin-dev-password)
-docker compose -f compose.test.yaml run --rm --build tests       # all 733 tests
+docker compose -f compose.test.yaml run --rm --build tests       # all 762 tests
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js
 docker compose -f compose.test.yaml run --rm tests python scripts/scale_check.py --sensors 100 --interval 1 --duration 30
 ```

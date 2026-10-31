@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ApiError, AuthError, fetchSensorAlerts, fetchTelemetry, updateSensor } from "../api";
 import { formatNumber, formatRelative } from "../format";
@@ -6,9 +6,11 @@ import type { Alert, Sensor, Telemetry } from "../types";
 import { CommandsPanel } from "./CommandsPanel";
 import { FirmwarePanel } from "./FirmwarePanel";
 import { BatteryIcon, CloseIcon, DevicesIcon, DropletIcon, GaugeIcon, PinIcon, SunIcon, ThermometerIcon } from "./Icons";
+import { useToast } from "./Toast";
 import { TrendChart } from "./TrendChart";
 
-const HISTORY_ROWS = 20;
+// How many recent readings the chart and table show; 20 by default.
+const RANGES = [20, 50, 100];
 
 interface Props {
   sensor: Sensor;
@@ -23,14 +25,16 @@ export function SensorDetails({ sensor, now, canEdit, onClose, onAuthError, onUp
   const [history, setHistory] = useState<Telemetry[] | null>(null);
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState(RANGES[0]);
+  const card = useRef<HTMLElement>(null);
   // Refetch history whenever the list refresh brings a newer reading.
   const latestId = sensor.latest_telemetry?.id ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetchTelemetry(sensor.sensor_id, HISTORY_ROWS, controller.signal),
-      fetchSensorAlerts(sensor.sensor_id, HISTORY_ROWS, controller.signal),
+      fetchTelemetry(sensor.sensor_id, rows, controller.signal),
+      fetchSensorAlerts(sensor.sensor_id, 20, controller.signal),
     ])
       .then(([nextHistory, nextAlerts]) => {
         setHistory(nextHistory);
@@ -43,12 +47,18 @@ export function SensorDetails({ sensor, now, canEdit, onClose, onAuthError, onUp
         setError(err instanceof ApiError ? err.message : "Unexpected error");
       });
     return () => controller.abort();
-  }, [sensor.sensor_id, latestId, onAuthError]);
+  }, [sensor.sensor_id, latestId, rows, onAuthError]);
+
+  // Bring the card into view when it opens (it appears above the device list).
+  useEffect(() => {
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    card.current?.scrollIntoView?.({ behavior: smooth ? "smooth" : "auto", block: "start" });
+  }, []);
 
   const t = sensor.latest_telemetry;
 
   return (
-    <section className="card details" aria-labelledby="details-heading" data-testid="sensor-details">
+    <section ref={card} className="card details" aria-labelledby="details-heading" data-testid="sensor-details">
       <div className="details-head">
         <div className="details-title">
           <span className={`device-icon device-big device-${sensor.status.toLowerCase()}`}><DevicesIcon size={26} /></span>
@@ -76,9 +86,19 @@ export function SensorDetails({ sensor, now, canEdit, onClose, onAuthError, onUp
 
       <div className="details-grid">
         <div className="details-main">
+          <div className="range-row">
+            <h3>Recent readings</h3>
+            <div className="segmented small" role="radiogroup" aria-label="Readings to show">
+              {RANGES.map((n) => (
+                <button key={n} type="button" role="radio" aria-checked={rows === n}
+                        className={rows === n ? "on" : undefined} onClick={() => setRows(n)} data-testid={`range-${n}`}>
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
           {history && history.length > 1 && <TrendChart history={history} />}
 
-          <h3>Recent readings</h3>
           {history === null ? (
             !error && <p className="meta">Loading…</p>
           ) : history.length === 0 ? (
@@ -165,6 +185,7 @@ function EditSensor({ sensor, onAuthError, onUpdated }: Pick<Props, "sensor" | "
   const [location, setLocation] = useState(sensor.location ?? "");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -172,6 +193,7 @@ function EditSensor({ sensor, onAuthError, onUpdated }: Pick<Props, "sensor" | "
     try {
       await updateSensor(sensor.sensor_id, { name, location });
       setMessage({ ok: true, text: "Saved" });
+      toast(`${sensor.sensor_id} saved`);
       onUpdated();
     } catch (err) {
       if (err instanceof AuthError) return onAuthError(err);

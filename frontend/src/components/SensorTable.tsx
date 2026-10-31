@@ -4,14 +4,28 @@ import { DevicesIcon } from "./Icons";
 
 const LOW_BATTERY = 20;
 
+export type SortKey = "id" | "temperature" | "humidity" | "battery" | "status" | "last_seen";
+export interface SortState { key: SortKey; direction: "asc" | "desc" }
+
+const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
+  { key: "id", label: "Sensor ID" },
+  { key: "temperature", label: "Temperature", numeric: true },
+  { key: "humidity", label: "Humidity", numeric: true },
+  { key: "battery", label: "Battery", numeric: true },
+  { key: "status", label: "Status" },
+  { key: "last_seen", label: "Last seen" },
+];
+
 interface Props {
   sensors: Sensor[];
   now: number;
   selected: string | null;
   onSelect: (sensorId: string) => void;
+  sort?: SortState | null;
+  onSort?: (key: SortKey) => void;
 }
 
-export function SensorTable({ sensors, now, selected, onSelect }: Props) {
+export function SensorTable({ sensors, now, selected, onSelect, sort = null, onSort }: Props) {
   if (sensors.length === 0) {
     return (
       <p className="empty" data-testid="sensors-empty">
@@ -25,12 +39,19 @@ export function SensorTable({ sensors, now, selected, onSelect }: Props) {
       <table data-testid="sensor-table">
         <thead>
           <tr>
-            <th scope="col">Sensor ID</th>
-            <th scope="col" className="num">Temperature</th>
-            <th scope="col" className="num">Humidity</th>
-            <th scope="col" className="num">Battery</th>
-            <th scope="col">Status</th>
-            <th scope="col">Last seen</th>
+            {COLUMNS.map((c) => {
+              const active = sort?.key === c.key;
+              return (
+                <th key={c.key} scope="col" className={c.numeric ? "num" : undefined}
+                    aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
+                  {onSort ? (
+                    <button type="button" className="sort" onClick={() => onSort(c.key)} data-testid={`sort-${c.key}`}>
+                      {c.label}
+                    </button>
+                  ) : c.label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -54,8 +75,13 @@ export function SensorTable({ sensors, now, selected, onSelect }: Props) {
                     </div>
                   </div>
                 </td>
-                <td data-testid="temperature" className="num">{formatNumber(t?.temperature, "°C")}</td>
-                <td data-testid="humidity" className="num">{formatNumber(t?.humidity, "%")}</td>
+                {/* key = value: the span is re-created when the reading changes, which replays its highlight. */}
+                <td data-testid="temperature" className="num">
+                  <span key={t?.temperature} className="tick">{formatNumber(t?.temperature, "°C")}</span>
+                </td>
+                <td data-testid="humidity" className="num">
+                  <span key={t?.humidity} className="tick">{formatNumber(t?.humidity, "%")}</span>
+                </td>
                 <td data-testid="battery" className={lowBattery ? "num low" : "num"}>
                   {formatNumber(sensor.battery, "%")}
                   {sensor.battery != null && (

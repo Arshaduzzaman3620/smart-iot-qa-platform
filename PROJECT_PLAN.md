@@ -28,6 +28,7 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15g** — Security and performance
 - [x] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
 - [x] **Phase 17** — Real-world TLS: HTTPS, MQTT over TLS, MySQL TLS, production configuration check
+- [x] **Phase 18** — Dashboard experience: smart-home redesign, motion, search / filter / sort, rooms view, users screen, confirmations, toasts, theme, bookmarkable sensors
 
 ## Definition of Done (per phase)
 
@@ -52,7 +53,14 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 17 complete: TLS everywhere** ([docs/security/tls.md](docs/security/tls.md)).
+**Phase 18 complete: the dashboard as a modern smart-home app** ([docs/frontend/dashboard.md](docs/frontend/dashboard.md)).
+- Redesign: sidebar layout, home status banner, overview tiles, list and rooms views, device detail card with reading tiles and a trend chart, split-screen sign-in, light / dark / system theme.
+- Features: search (`/` shortcut), status filter with counts, sortable columns, reading range 20 / 50 / 100, sensors in the address (bookmark, Back), users screen for admins, confirmation before restart and delete, toasts.
+- Motion with purpose (entrances, count-up numbers, highlight on change, skeletons), all off under reduced-motion. No new dependencies, CSP unchanged.
+- 29 new UI tests (762 total); a mutation check (removing the `204` fix and the restart confirmation) made the matching tests fail. Five defects found during the phase (#35–39 in the final report), one of them only by the full-suite run.
+- One-page project brief for presenting the work: [docs/project-brief.md](docs/project-brief.md).
+
+**Phase 17: TLS everywhere** ([docs/security/tls.md](docs/security/tls.md)).
 - A one-shot `certs` service creates a private CA and a server certificate in `./certs`; existing or real certificates are never replaced.
 - Dashboard and API over HTTPS (8443, HTTP/2, TLS 1.2+), plain HTTP only redirects. Optional HSTS.
 - Sensors, receiver and API use MQTT over TLS (8883) with certificate and host-name checks; firmware downloads go over HTTPS; MySQL requires TLS. Plain ports are bound to 127.0.0.1 only.
