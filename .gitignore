@@ -32,3 +32,6 @@ htmlcov/
 .idea/
 Thumbs.db
 .DS_Store
+
+# TLS certificates made by the certs service (docs/security/tls.md)
+certs/

@@ -8,7 +8,7 @@ A fully simulated, fictional IoT sensor platform built to learn and demonstrate 
 
 Virtual sensors send fictional telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
 
-**Results:** 703 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 31 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
+**Results:** 733 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 34 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
 
 ## Quick start
 
@@ -16,10 +16,11 @@ The only requirement is [Docker Desktop](https://www.docker.com/products/docker-
 
 ```bash
 docker compose up -d --build                                  # the whole platform, with 5 simulated sensors
-# dashboard: http://localhost:8080  (sign in: admin / admin-dev-password)
-# API docs:  http://localhost:8000/docs
+# dashboard: https://localhost:8443  (sign in: admin / admin-dev-password)
+# API docs:  https://localhost:8443/api/docs
+# First time: trust certs/ca.crt, or the browser warns (docs/security/tls.md)
 
-docker compose -f compose.test.yaml run --rm --build tests     # all 703 tests (~3.5 min)
+docker compose -f compose.test.yaml run --rm --build tests     # all 733 tests (~3.5 min)
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
 docker compose down                                           # stop
 ```
@@ -37,6 +38,7 @@ Running services with Python and Node on the host instead, plus troubleshooting:
 | Firmware over the air | Upload, scoped download tokens, verified install and reboot, injectable failures | [FOTA](docs/architecture/fota.md) |
 | Reliability | At-least-once with deduplication through MySQL, broker and receiver failures | [reliability](docs/testing/reliability.md) |
 | Security | Broker accounts and ACLs, CSP and security headers, hostile-input tests, dependency audit | [security](docs/security/security.md) |
+| TLS | HTTPS dashboard and API, MQTT over TLS, MySQL TLS, certificate and host-name checks everywhere, production configuration check | [TLS](docs/security/tls.md) |
 | Performance | k6 load, stress, spike and soak; 100-sensor ingestion check | [performance](docs/testing/performance.md) |
 | AI QA assistant | Claude generates test cases from requirements and analyses failing runs, grounded in these docs | [AI QA assistant](docs/testing/ai-qa-assistant.md) |
 
@@ -66,13 +68,14 @@ RECEIVER: parse -> validate -> batch writer -> MySQL -------+
 | Test automation | pytest, httpx, Playwright (Python), paho-mqtt |
 | Performance | k6 |
 | AI-assisted QA | Claude API (Anthropic Python SDK, structured outputs) |
+| TLS | Private CA generated with `cryptography`; nginx (HTTP/2), Mosquitto 8883, MySQL `require_secure_transport` |
 | Containers and CI | Docker Compose, GitHub Actions (tests, full-stack start, dependency audit) |
 
 ## Development phases
 
 This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
 
-Currently: **all phases are complete** (0–16). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the history and the [final QA report](docs/testing/final-report.md) for the results.
+Currently: **all phases are complete** (0–17). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the history and the [final QA report](docs/testing/final-report.md) for the results.
 
 ## Documentation
 

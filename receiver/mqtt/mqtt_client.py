@@ -1,15 +1,24 @@
 import logging
+import ssl
 
 import paho.mqtt.client as mqtt
 
 logger = logging.getLogger("receiver.mqtt_client")
 
 
+def tls_context(ca_file: str) -> ssl.SSLContext:
+    """Verify the broker's certificate and host name (TLS 1.2+). "system" = the OS's trusted CAs,
+    for a broker with a certificate from a public CA; otherwise the path of our CA (docs/security/tls.md)."""
+    context = ssl.create_default_context(cafile=None if ca_file == "system" else ca_file)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 class MQTTSubscriber:
     """Thin wrapper around paho-mqtt: connect, subscribe, reconnect, log. No parsing/validation here."""
 
     def __init__(self, host: str, port: int, client_id: str = "receiver", persistent_session: bool = True,
-                 username: str | None = None, password: str | None = None):
+                 username: str | None = None, password: str | None = None, tls_ca: str | None = None):
         # Persistent session (clean_session=False) + QoS 1: while the receiver is down or restarting,
         # the broker queues its messages and delivers them on reconnect, instead of dropping them.
         # manual_ack: a QoS 1 message is acknowledged only when the receiver calls ack(), i.e. after it is
@@ -18,6 +27,8 @@ class MQTTSubscriber:
                                    clean_session=not persistent_session, manual_ack=True)
         if username:
             self._client.username_pw_set(username, password)
+        if tls_ca:
+            self._client.tls_set_context(tls_context(tls_ca))
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.reconnect_delay_set(min_delay=1, max_delay=30)

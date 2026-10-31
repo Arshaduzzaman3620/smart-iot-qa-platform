@@ -13,3 +13,6 @@ playwright-report
 .DS_Store
 .vscode
 .idea
+
+# TLS keys (docs/security/tls.md) never go into an image
+certs/

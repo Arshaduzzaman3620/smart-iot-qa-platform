@@ -27,6 +27,7 @@ This project is built **one phase at a time**. A phase is not started until the 
   - [x] **15f** — Reliability and failure injection
   - [x] **15g** — Security and performance
 - [x] **Phase 16** — Final portfolio polish: docs, reports, CI/CD, AI QA assistant, final regression
+- [x] **Phase 17** — Real-world TLS: HTTPS, MQTT over TLS, MySQL TLS, production configuration check
 
 ## Definition of Done (per phase)
 
@@ -51,7 +52,14 @@ This project is built **one phase at a time**. A phase is not started until the 
 
 ## Current status
 
-**Phase 16 complete: the project is finished.** Results: [docs/testing/final-report.md](docs/testing/final-report.md).
+**Phase 17 complete: TLS everywhere** ([docs/security/tls.md](docs/security/tls.md)).
+- A one-shot `certs` service creates a private CA and a server certificate in `./certs`; existing or real certificates are never replaced.
+- Dashboard and API over HTTPS (8443, HTTP/2, TLS 1.2+), plain HTTP only redirects. Optional HSTS.
+- Sensors, receiver and API use MQTT over TLS (8883) with certificate and host-name checks; firmware downloads go over HTTPS; MySQL requires TLS. Plain ports are bound to 127.0.0.1 only.
+- `APP_ENV=production` makes the API refuse to start with dev passwords, a weak `JWT_SECRET` or without TLS.
+- Verification found two test defects and one product defect: a duplicate test module name, a TLS 1.1 test that passed because the *client* refused TLS 1.1, and the generator recognising its own certificates by name (it would have overwritten a certificate from another CA).
+
+**Phase 16:** the project's original scope is finished. Results: [docs/testing/final-report.md](docs/testing/final-report.md).
 - **AI QA assistant** ([qa-assistant/](qa-assistant/), [doc](docs/testing/ai-qa-assistant.md)): `generate-tests` turns a requirement into positive, negative and boundary test cases per layer, marking what is already covered. `analyze-failures` classifies each failure of a pytest run, with evidence and a next step. Claude Opus 5.5 via the Anthropic SDK, with structured outputs (Pydantic), the project docs as the cached specification, refusal fallback, and every non-answer turned into a clear error. 17 tests with a fake client (no API calls, no key needed in CI). Not yet run against the live API (no key on the build machine).
 - **Final QA report:** test inventory (703 tests, 7 layers), requirements traceability (11 of 11 covered), the defect log (31 found and fixed), known limits, and how to reproduce.
 - **Docs polish:** the README is the project's front page (results, quick start, features, architecture, stack), test counts are updated, and every doc link was checked.

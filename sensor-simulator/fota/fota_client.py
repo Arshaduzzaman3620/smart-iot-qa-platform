@@ -4,6 +4,7 @@ No MQTT or sensor-state code here -- progress goes out through the `report` call
 import hashlib
 import json
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -59,9 +60,13 @@ def parse_update(payload: bytes) -> UpdateRequest:
     return UpdateRequest(update_id, version, size, sha256, url)
 
 
-def download(base_url: str, path: str, max_size: int = MAX_SIZE) -> bytes:
+def download(base_url: str, path: str, max_size: int = MAX_SIZE, ca_file: str | None = None) -> bytes:
+    """Over HTTPS the server's certificate and host name are checked, against `ca_file` if given
+    (our CA, docs/security/tls.md), otherwise the OS's trusted CAs."""
+    context = ssl.create_default_context(cafile=ca_file) if base_url.startswith("https:") else None
     try:
-        with urllib.request.urlopen(base_url.rstrip("/") + path, timeout=DOWNLOAD_TIMEOUT) as response:
+        with urllib.request.urlopen(base_url.rstrip("/") + path, timeout=DOWNLOAD_TIMEOUT,
+                                    context=context) as response:
             content = response.read(max_size + 1)
     except urllib.error.HTTPError as exc:
         raise FotaError(f"download failed: HTTP {exc.code}") from None

@@ -1,11 +1,15 @@
 # The whole platform in Docker: broker, MySQL, receiver, API, simulator and dashboard.
 # Only Docker is needed on the machine (macOS, Windows or Linux).
 #
-#   docker compose up -d --build     dashboard: http://localhost:8080   API: http://localhost:8000/docs
+#   docker compose up -d --build     dashboard: https://localhost:8443   API docs: https://localhost:8443/api/docs
 #   docker compose logs -f receiver
 #   docker compose down              (add -v to also delete the database)
 #
 # Settings come from .env in this folder if it exists (see .env.example); every one has a default.
+#
+# TLS (Phase 17, docs/security/tls.md): the dashboard is HTTPS, and every service talks to the broker
+# and MySQL over TLS, checking certificates against the CA in ./certs (created on first start).
+# Plain ports (MQTT 1883, API 8000, MySQL 3307) are published on 127.0.0.1 only, for local tools.
 # Run only the infrastructure, for Python run on the host:  docker compose up -d mqtt mysql
 name: smart-iot
 
@@ -25,12 +29,30 @@ x-app-env: &app-env
   MYSQL_USER: ${MYSQL_USER:-smart_iot_user}
   MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
   MQTT_HOST: mqtt
-  MQTT_PORT: "1883"
+  MQTT_PORT: "8883"
+  MQTT_TLS_CA: /certs/ca.crt
+  MYSQL_SSL_CA: /certs/ca.crt
   # Each service signs in to the broker with its own account (docker/mosquitto/acl).
   RECEIVER_MQTT_PASSWORD: ${RECEIVER_MQTT_PASSWORD:-receiver-dev-password}
   API_MQTT_PASSWORD: ${API_MQTT_PASSWORD:-api-dev-password}
 
+# Our CA's certificate for the clients (read-only), and the server certificates for the servers.
+x-certs: &certs ${TLS_DIR:-./certs}:/certs:ro
+
 services:
+  # Creates ./certs (CA + server certificate) if missing, then exits. Everything else waits for it.
+  certs:
+    <<: *python
+    command: ["python", "/tls/make_certs.py", "/certs"]
+    environment:
+      TLS_HOSTNAMES: ${TLS_HOSTNAMES:-localhost,127.0.0.1,mqtt,dashboard,mysql}
+    # Root, so it can write the bind-mounted folder on Linux too; the keys it writes are 0600.
+    user: "0:0"
+    volumes:
+      - ${TLS_DIR:-./certs}:/certs
+      - ./docker/tls:/tls:ro
+    restart: "no"
+
   mqtt:
     image: eclipse-mosquitto:2
     # Builds the password file from these, then starts Mosquitto (docker/mosquitto/entrypoint.sh).
@@ -42,15 +64,24 @@ services:
       # Test-harness account (runs pytest from the host against this broker). Empty = not created.
       QA_MQTT_PASSWORD: ${QA_MQTT_PASSWORD:-qa-dev-password}
     ports:
-      - "${MQTT_PORT:-1883}:1883"
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+      - "${MQTTS_PORT:-8883}:8883"
     volumes:
       - ./docker/mosquitto:/mosquitto/config:ro
       # Sessions and queued messages survive a broker restart (docs/testing/reliability.md).
       - mqtt-data:/mosquitto/data
+      - *certs
+    depends_on:
+      certs:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   mysql:
     image: mysql:8.4
+    # TLS only (require_secure_transport): MySQL runs as the mysql user, so it gets its own copy of the key.
+    entrypoint: ["sh", "-c", "install -D -o mysql -g mysql -m 0600 /certs/server.key /etc/mysql/tls/server.key && exec docker-entrypoint.sh \"$$@\"", "--"]
+    command: ["mysqld", "--ssl-ca=/certs/ca.crt", "--ssl-cert=/certs/server.crt",
+              "--ssl-key=/etc/mysql/tls/server.key", "--require-secure-transport=ON", "--tls-version=TLSv1.2,TLSv1.3"]
     environment:
       # The official image creates this database and user on first start.
       MYSQL_DATABASE: ${MYSQL_DATABASE:-smart_iot}
@@ -60,9 +91,10 @@ services:
       MYSQL_RANDOM_ROOT_PASSWORD: "yes"
     ports:
       # Host port 3307 so it doesn't collide with a locally installed MySQL on 3306.
-      - "${MYSQL_PORT:-3307}:3306"
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      - *certs
     healthcheck:
       # Over TCP (127.0.0.1), as the app user, against the app database. During first-start setup
       # the image runs a temporary server reachable only through the local socket, so a socket
@@ -71,6 +103,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    depends_on:
+      certs:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Creates or upgrades the schema, then exits. The receiver and API wait for it.
@@ -81,6 +116,8 @@ services:
       <<: *app-env
       # Second safety net behind the healthcheck: keep retrying while MySQL still refuses connections.
       INIT_DB_WAIT: "60"
+    volumes:
+      - *certs
     depends_on:
       mysql:
         condition: service_healthy
@@ -97,6 +134,8 @@ services:
       RECEIVER_BATCH_MAX: ${RECEIVER_BATCH_MAX:-200}
       COMMAND_TIMEOUT: ${COMMAND_TIMEOUT:-30}
       FOTA_TIMEOUT: ${FOTA_TIMEOUT:-300}
+    volumes:
+      - *certs
     depends_on:
       mqtt:
         condition: service_started
@@ -121,8 +160,13 @@ services:
       TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
       # The dashboard's nginx passes the caller's address in X-Real-IP (login rate limiting).
       TRUST_PROXY: "1"
+      # production = refuse to start with dev passwords or without TLS (backend/app/config_check.py).
+      APP_ENV: ${APP_ENV:-development}
     ports:
-      - "${API_PORT:-8000}:8000"
+      # Plain HTTP for local tools only; everyone else goes through the dashboard's HTTPS.
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - *certs
     depends_on:
       init-db:
         condition: service_completed_successfully
@@ -138,31 +182,48 @@ services:
     command: ["python", "main.py"]
     environment:
       MQTT_HOST: mqtt
-      MQTT_PORT: "1883"
+      MQTT_PORT: "8883"
+      MQTT_TLS_CA: /certs/ca.crt
       SENSOR_MQTT_PASSWORD: ${SENSOR_MQTT_PASSWORD:-sensor-dev-password}
       SENSOR_COUNT: ${SENSOR_COUNT:-5}
       SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
-      # Where sensors download firmware from (the URL path comes in the update message).
-      API_BASE_URL: http://api:8000
+      # Where sensors download firmware from (the URL path comes in the update message): over HTTPS,
+      # through the dashboard's nginx, like a device on the internet would.
+      API_BASE_URL: https://dashboard/api
+      API_CA_FILE: /certs/ca.crt
       # Inject a FOTA failure on every update: none / download / corrupt / install (docs/architecture/fota.md)
       FOTA_FAILURE: ${FOTA_FAILURE:-none}
       # Fault injection, probability per reading 0-1 (docs/testing/reliability.md)
       FAULT_INVALID_RATE: ${FAULT_INVALID_RATE:-0}
       FAULT_MALFORMED_RATE: ${FAULT_MALFORMED_RATE:-0}
       FAULT_DUPLICATE_RATE: ${FAULT_DUPLICATE_RATE:-0}
+    volumes:
+      - *certs
     depends_on:
       - mqtt
       - receiver
+      - dashboard
 
   dashboard:
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
     image: smart-iot/dashboard:local
+    environment:
+      # Where the HTTP port redirects to: the HTTPS port as the browser sees it.
+      HTTPS_PORT: ${HTTPS_PORT:-8443}
+      # 0 on localhost; 31536000 (a year) once it runs on a real domain (docker/nginx.conf.template).
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-0}
     ports:
       - "${DASHBOARD_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - *certs
     depends_on:
-      - api
+      certs:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
     restart: unless-stopped
 
   # Load tests, only with --profile perf (docs/testing/performance.md):

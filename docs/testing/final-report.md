@@ -6,21 +6,22 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 
 | | |
 |---|---|
-| Automated tests | **703**, in 7 layers, all passing ([inventory](#test-inventory)) |
+| Automated tests | **733**, in 7 layers, all passing ([inventory](#test-inventory)) |
 | Requirements | **11 of 11** functional requirements implemented and covered by tests ([traceability](#requirements-traceability)) |
-| Defects found and fixed | **31** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
+| Defects found and fixed | **34** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
 | Reliability | 0 readings lost, 0 stored twice, through MySQL, broker and receiver outages ([reliability.md](reliability.md)) |
 | Performance | 303 req/s at 300 virtual users with 0 % errors; 100 sensors at 1 reading/s stored with ≤ 1 s latency ([performance.md](performance.md)) |
 | Security | JWT roles, broker auth + ACLs, rate limiting, CSP, dependency audit ([security.md](../security/security.md)) |
-| Open limits | Listed [below](#known-limits): no TLS, one shared device account, one API process |
+| TLS (Phase 17) | HTTPS, MQTT over TLS, MySQL TLS, certificate and host-name checks, production check ([tls.md](../security/tls.md)) |
+| Open limits | Listed [below](#known-limits): one shared device account, one API process |
 
 ## Test inventory
 
 | Layer | Tests | What it proves | Needs |
 |---|---|---|---|
-| unit | 308 | Parser, validator (every boundary ±0.01), generator, alert rules, batch writer (outage hold, acks), passwords and tokens, FOTA device logic, command parsing, fault injector, rate limiter, middleware, AI QA assistant | nothing |
+| unit | 331 | Parser, validator (every boundary ±0.01), generator, alert rules, batch writer (outage hold, acks), passwords and tokens, FOTA device logic, command parsing, fault injector, rate limiter, middleware, AI QA assistant, certificates and HTTPS downloads, production check | nothing |
 | api | 252 | Every endpoint: success, boundaries, 401/403 by role, 404/409/413/422/429/503, hostile input, headers, firmware tokens | MySQL |
-| mqtt | 21 | Broker round trip, wildcards, ordering, **ACLs per account** | broker |
+| mqtt | 28 | Broker round trip, wildcards, ordering, **ACLs per account**, **TLS listener** (certificate, host name, TLS 1.1 refused) | broker |
 | integration | 56 | Real receiver process: storage, rejection, alerts, offline detection, batching, commands, firmware progress, status messages | broker + MySQL |
 | reliability | 4 | MySQL outage, broker outage, receiver SIGKILL, faulty sensors, via TCP proxies | broker + MySQL |
 | ui | 48 | Every dashboard state in Chromium, API mocked: sign-in, tables, alerts, details, commands, firmware, XSS, phone width | Node |
@@ -83,10 +84,13 @@ Every defect below was found by a test, a manual check or a measurement while bu
 | 29 | 15g | PyJWT warning: test signing keys under 32 bytes | test warnings | longer keys; API warns on short `JWT_SECRET` |
 | 30 | env | Mac sleep paused Docker (looked like data loss) | manual check | documented; re-measured awake |
 | 31 | 16 | Pytest tried to collect the `TestCase` / `TestPlan` models | test run | `__test__ = False` |
+| 32 | 17 | Certificate generator recognised its own certificates by name, so it would overwrite one from another CA | unit test | check by signature |
+| 33 | 17 | TLS 1.1 test passed because the *client* refused TLS 1.1, never asking the broker | review of a too-easy pass | client offers TLS 1.1; test expects the broker's alert |
+| 34 | 17 | Two test modules named `test_tls` broke collection (same as #26) | full-suite run | renamed `test_broker_tls` |
 
 ## Known limits
 
-- **No TLS** on MQTT or HTTP: fine on one machine. Elsewhere, add TLS listeners and HTTPS ([security.md](../security/security.md#known-limits)).
+- **TLS** was added in Phase 17 ([tls.md](../security/tls.md#limits) lists what it doesn't cover yet: per-device client certificates, one shared server certificate).
 - **One shared device account** on the broker: the receiver catches mismatched IDs, but per-device credentials would be needed to stop a compromised device using another's topic.
 - **One API process** at about 300 req/s. Scaling out needs a fixed `JWT_SECRET` and a shared login limiter.
 - **Tokens can't be revoked individually** before they expire (60 min), except by deleting the user.
@@ -96,6 +100,8 @@ Every defect below was found by a test, a manual check or a measurement while bu
 
 | Check | Result |
 |---|---|
+| **Phase 17 (2026-10-31): full suite** | **733 / 733 passed** (3 min 31 s) |
+| **Phase 17: fresh stack with new certificates** | `301` to HTTPS, plain MySQL refused, 5 sensors reporting over HTTPS, 0 error lines |
 | Full suite, run twice in a row | **703 / 703 passed both times** (3 min 22 s, 3 min 27 s), no flaky tests |
 | Fresh install from empty volumes (isolated Compose project) | All services healthy, initial admin created, sign-in through the dashboard, 5 / 5 sensors reporting with firmware and names, 0 error lines in any log |
 | Mutation check: temperature limit widened 85 → 86 (test container only) | Caught by 3 tests: validator unit, generator/validator range consistency, receiver integration |
@@ -107,8 +113,8 @@ The first `docker compose up` of the fresh install failed instantly once, with i
 ## How to reproduce
 
 ```bash
-docker compose up -d --build                                    # the platform, http://localhost:8080 (admin / admin-dev-password)
-docker compose -f compose.test.yaml run --rm --build tests       # all 703 tests
+docker compose up -d --build                                    # the platform, https://localhost:8443 (admin / admin-dev-password)
+docker compose -f compose.test.yaml run --rm --build tests       # all 733 tests
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js
 docker compose -f compose.test.yaml run --rm tests python scripts/scale_check.py --sensors 100 --interval 1 --duration 30
 ```

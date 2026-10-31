@@ -13,3 +13,6 @@ MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3307"))
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "smart_iot")
 MYSQL_USER = os.getenv("MYSQL_USER", "smart_iot_user")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "changeme")
+# TLS (docs/security/tls.md): CA that signs MySQL's certificate. Set = encrypted connections that check
+# the server's certificate and host name; empty = plain (the test stack's throwaway MySQL).
+MYSQL_SSL_CA = os.getenv("MYSQL_SSL_CA", "")
