@@ -1,72 +1,113 @@
-# SmartIoT Sensor Quality Engineering Platform
+# SmartIoT — Smart-Home Monitoring & Quality Engineering Platform
 
 [![CI](https://github.com/Arshaduzzaman3620/smart-iot-qa-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Arshaduzzaman3620/smart-iot-qa-platform/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-816%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/test%20layers-7-6f42c1)
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-React%2018-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-A smart-home IoT platform with simulated sensors, built to demonstrate professional Software Quality Assurance and test automation end to end: Python, TypeScript, MQTT, FastAPI, MySQL, Playwright, pytest, Docker, CI/CD, and AI-assisted QA.
+> A complete smart-home monitoring system — simulated sensors, a secure web dashboard, remote device control and over-the-air updates — built the way a real product is: in small, verified steps, tested at every level, secured, measured under load and documented end to end.
 
-## What this is
+**In plain terms:** sensors in every room report temperature, humidity, air pressure, light and battery. The platform collects those readings, checks them, stores them, raises alerts when something is wrong, and shows everything on one secure dashboard where you can control devices and install updates remotely. Everything runs on a single laptop with one command — no hardware needed.
 
-Simulated sensors send telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
+Built and tested end to end by **Arshaduzzaman** as a portfolio of professional Software Quality Assurance and test automation. One-page summary for reviewers: **[project brief](docs/project-brief.md)**.
 
-**Results:** 816 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
+---
 
-## Quick start
+## Highlights at a glance
+
+| | |
+|---|---|
+| ✅ **816 automated tests** across 7 layers | from single functions to the full system in a real browser — all passing |
+| 🛡️ **Security built in, proven by tests** | TLS everywhere, role-based access, brute-force protection, dependency audits, a pre-launch security review |
+| ⚡ **303 requests/second, 0 % errors** | at 300 concurrent users — after load testing found and fixed a throughput collapse (up from 124) |
+| 🔁 **Zero data lost** | no reading lost or duplicated when the database, broker or receiver was killed mid-operation |
+| 📋 **11 / 11 requirements traced** | every requirement linked to the tests that prove it |
+| 🐛 **41 defects found and fixed** | each now guarded by a regression test |
+| 🤖 **AI-assisted QA** | a Claude-powered tool turns written requirements into test cases and explains failing runs |
+
+Full evidence: **[Final QA report](docs/testing/final-report.md)**.
+
+---
+
+## See it running in five minutes
 
 The only requirement is [Docker Desktop](https://www.docker.com/products/docker-desktop/). The same commands work on macOS, Windows and Linux.
 
 ```bash
-docker compose up -d --build                                  # the whole platform, with 5 simulated sensors
-# dashboard: https://localhost:8443  (sign in: admin / admin-dev-password)
-# emails:    http://localhost:8025     (Mailpit: welcome and password reset emails)
-# API docs:  https://localhost:8443/api/docs
-# First time: trust certs/ca.crt, or the browser warns (docs/security/tls.md)
-
-docker compose -f compose.test.yaml run --rm --build tests     # all 816 tests (~5 min)
-docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
-docker compose down                                           # stop
+docker compose up -d --build        # start the whole platform with 5 simulated sensors
 ```
 
-Running services with Python and Node on the host instead, plus troubleshooting: [docs/development/setup.md](docs/development/setup.md). Running it on a server: **[deployment guide](docs/deployment.md)** (the defaults above are development passwords and must not be used there).
+Then open:
 
-## Features
+| What | Where | Notes |
+|---|---|---|
+| **Dashboard** | https://localhost:8443 | sign in as `admin` / `admin-dev-password` |
+| **Emails** | http://localhost:8025 | local inbox for welcome and password-reset emails |
+| **API docs** | https://localhost:8443/api/docs | interactive REST reference |
+
+> First visit: trust `certs/ca.crt` or the browser will warn about the self-signed certificate ([why](docs/security/tls.md)).
+
+```bash
+docker compose -f compose.test.yaml run --rm --build tests      # run all 816 tests (~5 min)
+docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
+docker compose down                                             # stop everything
+```
+
+Running it with Python and Node on the host instead, plus troubleshooting: [development setup](docs/development/setup.md).
+Deploying it to a real server: **[deployment guide](docs/deployment.md)** — the passwords above are development defaults and are refused in production.
+
+---
+
+## What it does
 
 | Area | What it does | Docs |
 |---|---|---|
-| Telemetry pipeline | Sensors → MQTT → receiver (parse, validate, store in batches) → MySQL → API → dashboard | [architecture](docs/architecture/architecture.md), [database](docs/architecture/database.md) |
-| Alerts | Threshold alerts (battery, temperature, humidity) with escalation and hysteresis; offline detection | [alerts](docs/architecture/alerts.md) |
-| Access control | JWT sign-in, VIEWER / OPERATOR / ADMIN, user management, login rate limiting | [auth](docs/api/auth.md) |
-| Accounts | Admin-managed accounts with email and roles, welcome email, forgot username / password by email with one-time reset links, sessions end on reset (Mailpit as local inbox) | [accounts](docs/api/auth.md#accounts-and-recovery-phase-19) |
-| Commands | Restart, request a reading, change the interval, with each outcome tracked | [commands](docs/architecture/commands.md) |
-| Firmware over the air | Upload, scoped download tokens, verified install and reboot, injectable failures | [FOTA](docs/architecture/fota.md) |
-| Reliability | At-least-once with deduplication through MySQL, broker and receiver failures | [reliability](docs/testing/reliability.md) |
-| Security | Broker accounts and ACLs, CSP and security headers, hostile-input tests, dependency audit | [security](docs/security/security.md) |
-| TLS | HTTPS dashboard and API, MQTT over TLS, MySQL TLS, certificate and host-name checks everywhere, production configuration check | [TLS](docs/security/tls.md) |
-| Performance | k6 load, stress, spike and soak; 100-sensor ingestion check | [performance](docs/testing/performance.md) |
-| Dashboard experience | Home status banner, list and rooms views, search (`/`), status filter, sorting, users screen, confirmations, toasts, light / dark theme, bookmarkable sensors, motion that respects reduced-motion | [dashboard](docs/frontend/dashboard.md) |
-| AI QA assistant | Claude generates test cases from requirements and analyses failing runs, grounded in these docs | [AI QA assistant](docs/testing/ai-qa-assistant.md) |
+| **Live home overview** | One screen: devices online, average temperature and humidity, and anything needing attention, refreshed every few seconds | [dashboard](docs/frontend/dashboard.md) |
+| **Alerts** | Low battery, out-of-range temperature, high humidity and offline devices, with escalation and hysteresis | [alerts](docs/architecture/alerts.md) |
+| **Device control** | Restart a device, request a fresh reading, change how often it reports — each outcome tracked | [commands](docs/architecture/commands.md) |
+| **Remote firmware updates** | Upload a version and install it over the air; a failed or interrupted update leaves the device on its previous version | [FOTA](docs/architecture/fota.md) |
+| **Secure access** | Sign-in with three roles (viewer, operator, admin); admins create and remove accounts | [auth](docs/api/auth.md) |
+| **Account recovery** | Forgot username or password by email, with a one-time, time-limited reset link | [accounts](docs/api/auth.md#accounts-and-recovery-phase-19) |
+| **Reliability** | At-least-once delivery with de-duplication through database, broker and receiver outages | [reliability](docs/testing/reliability.md) |
+| **Security & TLS** | Broker accounts and ACLs, encrypted connections everywhere, strict CSP, hostile-input tests, production safety checks | [security](docs/security/security.md), [TLS](docs/security/tls.md) |
 
-## Architecture
+---
+
+## How it fits together
 
 ```mermaid
 flowchart LR
-    S["Sensor simulator<br/>SENSOR-001 … 100"] -- "MQTT over TLS<br/>telemetry, results" --> B[("Mosquitto<br/>accounts + ACLs")]
+    U(["Browser"]) -- HTTPS --> N["nginx + React dashboard<br/>HTTPS, strict CSP"]
+    N -- /api --> API["FastAPI<br/>tokens + roles"]
+    API --> DB[("MySQL 8.4<br/>TLS")]
+    API -- "commands,<br/>firmware" --> B[("Mosquitto<br/>accounts + ACLs")]
+    S["Sensor simulator<br/>SENSOR-001 … 100"] -- "MQTT over TLS<br/>telemetry, results" --> B
     B -- "commands,<br/>firmware" --> S
     B --> R["Receiver<br/>parse · validate · batch"]
-    R --> DB[("MySQL 8.4<br/>TLS")]
-    API["FastAPI<br/>tokens + roles"] --> DB
-    API -- "commands,<br/>firmware" --> B
-    N["nginx + React dashboard<br/>HTTPS, strict CSP"] -- /api --> API
-    U(["Browser"]) -- HTTPS --> N
+    R --> DB
+
+    classDef person fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef device fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a;
+    classDef edge fill:#e0e7ff,stroke:#4f46e5,stroke-width:1px,color:#1e1b4b;
+    classDef service fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    classDef broker fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#7c2d12;
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
+    class U person;
+    class S device;
+    class N edge;
+    class API,R service;
+    class B broker;
+    class DB store;
 ```
 
-Components, message flows, security boundaries and the deployment view: **[architecture](docs/architecture/architecture.md)**.
+Each part has a single responsibility and can be tested on its own. Full component, data-flow, security and deployment diagrams: **[architecture](docs/architecture/architecture.md)**.
 
-## Tech stack
+---
+
+## Built with
 
 | Layer | Technology |
 |---|---|
@@ -80,36 +121,47 @@ Components, message flows, security boundaries and the deployment view: **[archi
 | Performance | k6 |
 | AI-assisted QA | Claude API (Anthropic Python SDK, structured outputs) |
 | TLS | Private CA generated with `cryptography`; nginx (HTTP/2), Mosquitto 8883, MySQL `require_secure_transport` |
-| Containers and CI | Docker Compose, GitHub Actions (tests, full-stack start, dependency audit) |
+| Containers & CI | Docker Compose, GitHub Actions (tests, full-stack start, dependency audit) |
 
-## Development phases
+---
 
-This project is built one phase at a time, with a commit + pull request + merge cycle after each phase is verified working. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full phase-by-phase roadmap and current progress.
+## What this project demonstrates
 
-Currently: **all phases are complete** (0–19). A one-page summary for presenting the project: [docs/project-brief.md](docs/project-brief.md). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the history and the [final QA report](docs/testing/final-report.md) for the results.
+Test strategy and planning · Test automation at every level (unit, API, integration, UI, end-to-end) · Performance and reliability testing · Security testing and a pre-launch review · Defect analysis and reporting · Requirements traceability · CI/CD · Docker · Python and TypeScript development · Technical documentation · AI-assisted testing.
+
+The work was delivered in **19 verified phases**, each one built to scope, checked by hand on the running system, covered by tests for normal use, invalid input and edge cases, documented, and merged through a pull request with automated checks — the way quality-focused teams ship software. History and roadmap: [PROJECT_PLAN.md](PROJECT_PLAN.md).
+
+---
 
 ## Documentation
 
-- [Final QA report](docs/testing/final-report.md)
-- [Project brief](docs/project-brief.md)
-- [Development setup](docs/development/setup.md)
+**Start here:** [project brief](docs/project-brief.md) · [architecture](docs/architecture/architecture.md) · [final QA report](docs/testing/final-report.md) · [deployment guide](docs/deployment.md)
+
+<details>
+<summary><strong>All documents</strong></summary>
+
 - [Requirements](docs/requirements/requirements.md)
-- [Architecture](docs/architecture/architecture.md)
-- [Sensor behavior](docs/architecture/sensor-behavior.md)
+- [Development setup](docs/development/setup.md)
+- [Sensor behaviour](docs/architecture/sensor-behavior.md)
 - [MQTT topic design](docs/mqtt/topics.md)
 - [Database structure](docs/architecture/database.md)
 - [REST API](docs/api/endpoints.md)
 - [Authentication and roles](docs/api/auth.md)
 - [Web dashboard](docs/frontend/dashboard.md)
 - [Testing strategy](docs/testing/strategy.md)
-- [Manual E2E verification](docs/testing/e2e-manual-verification.md)
 - [Test automation](docs/testing/automation.md)
+- [Manual end-to-end verification](docs/testing/e2e-manual-verification.md)
 - [Multi-sensor scale results](docs/testing/scale-results.md)
 - [Alerts and offline detection](docs/architecture/alerts.md)
 - [Sensor commands](docs/architecture/commands.md)
 - [Firmware over the air](docs/architecture/fota.md)
 - [Reliability and failure injection](docs/testing/reliability.md)
 - [Security](docs/security/security.md) and [TLS](docs/security/tls.md)
-- [Deployment guide](docs/deployment.md)
 - [Performance](docs/testing/performance.md)
 - [AI QA assistant](docs/testing/ai-qa-assistant.md)
+
+</details>
+
+---
+
+<sub>Licensed under [Apache 2.0](LICENSE). Sensors are simulated in software, so the whole system runs on one machine with no hardware.</sub>

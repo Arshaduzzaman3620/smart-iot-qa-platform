@@ -14,31 +14,46 @@ SmartIoT is a set of small services, each with a single responsibility, connecte
 
 ```mermaid
 flowchart LR
+    U(["People<br/>viewer · operator · admin"])
+
     subgraph Devices["Devices (simulated)"]
         S["Sensor simulator<br/>SENSOR-001 … 100"]
     end
 
     subgraph Platform["SmartIoT platform"]
+        N["nginx<br/>dashboard + /api proxy"]
+        API["FastAPI<br/>REST API"]
         B[("Mosquitto<br/>MQTT broker")]
         R["Receiver<br/>parse · validate · store"]
         DB[("MySQL 8.4")]
-        API["FastAPI<br/>REST API"]
-        N["nginx<br/>dashboard + /api proxy"]
         M["Mail server<br/>(Mailpit locally)"]
     end
 
-    U(["People<br/>viewer · operator · admin"])
-
+    U -- HTTPS --> N
+    N --> API
+    API --> DB
+    API -- "commands,<br/>firmware updates" --> B
+    API -- "welcome and<br/>reset emails" --> M
     S -- "telemetry, status,<br/>command results" --> B
     B -- "commands,<br/>firmware updates" --> S
     B --> R
     R --> DB
-    API --> DB
-    API -- "commands,<br/>firmware updates" --> B
-    N --> API
-    U -- HTTPS --> N
     S -. "firmware download<br/>(HTTPS, one-time token)" .-> N
-    API -- "welcome and<br/>reset emails" --> M
+
+    classDef person fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef device fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a;
+    classDef edge fill:#e0e7ff,stroke:#4f46e5,stroke-width:1px,color:#1e1b4b;
+    classDef service fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    classDef broker fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#7c2d12;
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
+    classDef mail fill:#fce7f3,stroke:#db2777,stroke-width:1px,color:#831843;
+    class U person;
+    class S device;
+    class N edge;
+    class API,R service;
+    class B broker;
+    class DB store;
+    class M mail;
 ```
 
 ## Components
@@ -144,6 +159,19 @@ flowchart TB
     R -- TLS --> DB
     API -- TLS --> B
     R -- TLS --> B
+
+    classDef person fill:#dbeafe,stroke:#2563eb,stroke-width:1px,color:#0b2447;
+    classDef device fill:#f1f5f9,stroke:#475569,stroke-width:1px,color:#0f172a;
+    classDef edge fill:#e0e7ff,stroke:#4f46e5,stroke-width:1px,color:#1e1b4b;
+    classDef service fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    classDef broker fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#7c2d12;
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
+    class U person;
+    class S device;
+    class N edge;
+    class B broker;
+    class API,R service;
+    class DB store;
 ```
 
 | Boundary | Control |
@@ -166,6 +194,17 @@ flowchart LR
     mqtt --> receiver
     api --> dashboard
     mqtt & receiver & dashboard --> simulator
+
+    classDef oneshot fill:#fef9c3,stroke:#ca8a04,stroke-width:1px,color:#713f12;
+    classDef svc fill:#ede9fe,stroke:#7c3aed,stroke-width:1px,color:#2e1065;
+    classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:1px,color:#14532d;
+    classDef broker fill:#fef3c7,stroke:#d97706,stroke-width:1px,color:#7c2d12;
+    classDef edge fill:#e0e7ff,stroke:#4f46e5,stroke-width:1px,color:#1e1b4b;
+    class certs,initdb oneshot;
+    class mysql store;
+    class mqtt broker;
+    class dashboard edge;
+    class receiver,api,simulator svc;
 ```
 
 Arrows show start order: each service starts once the ones before it are ready.
