@@ -1,14 +1,19 @@
 # SmartIoT Sensor Quality Engineering Platform
 
+[![CI](https://github.com/Arshaduzzaman3620/smart-iot-qa-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Arshaduzzaman3620/smart-iot-qa-platform/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-816%20passing-brightgreen)
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-React%2018-3178C6?logo=typescript&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
 A smart-home IoT platform with simulated sensors, built to demonstrate professional Software Quality Assurance and test automation end to end: Python, TypeScript, MQTT, FastAPI, MySQL, Playwright, pytest, Docker, CI/CD, and AI-assisted QA.
-
-
 
 ## What this is
 
 Simulated sensors send telemetry (temperature, humidity, pressure, light, battery) over MQTT. A receiver validates it and stores it in MySQL, raising alerts and spotting offline sensors. A FastAPI backend serves it with role-based access. A React dashboard shows it, and lets operators send commands and roll out firmware. Every layer is covered by automated tests, from unit tests to outage and load tests, built up one phase at a time.
 
-**Results:** 813 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
+**Results:** 816 automated tests in 7 layers, all passing. 0 readings lost or duplicated through database, broker and receiver outages. 303 API requests/s at 300 concurrent users with 0 % errors. 41 defects found and fixed along the way. Full picture: **[Final QA report](docs/testing/final-report.md)**.
 
 ## Quick start
 
@@ -21,12 +26,12 @@ docker compose up -d --build                                  # the whole platfo
 # API docs:  https://localhost:8443/api/docs
 # First time: trust certs/ca.crt, or the browser warns (docs/security/tls.md)
 
-docker compose -f compose.test.yaml run --rm --build tests     # all 813 tests (~5 min)
+docker compose -f compose.test.yaml run --rm --build tests     # all 816 tests (~5 min)
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js   # load test
 docker compose down                                           # stop
 ```
 
-Running services with Python and Node on the host instead, plus troubleshooting: [docs/development/setup.md](docs/development/setup.md).
+Running services with Python and Node on the host instead, plus troubleshooting: [docs/development/setup.md](docs/development/setup.md). Running it on a server: **[deployment guide](docs/deployment.md)** (the defaults above are development passwords and must not be used there).
 
 ## Features
 
@@ -47,16 +52,19 @@ Running services with Python and Node on the host instead, plus troubleshooting:
 
 ## Architecture
 
-```text
-SENSOR SIMULATOR (SENSOR-001 … SENSOR-100)          dashboard (React, nginx)
-   | telemetry, status, responses   ^ commands,            | /api
-   v  (QoS 1, buffered)             | firmware             v
-MQTT BROKER (Mosquitto: accounts + ACLs) <------------ FastAPI (JWT roles)
-   |                                                        ^
-   v                                                        |
-RECEIVER: parse -> validate -> batch writer -> MySQL -------+
-          alerts, offline detection, command / firmware outcomes
+```mermaid
+flowchart LR
+    S["Sensor simulator<br/>SENSOR-001 … 100"] -- "MQTT over TLS<br/>telemetry, results" --> B[("Mosquitto<br/>accounts + ACLs")]
+    B -- "commands,<br/>firmware" --> S
+    B --> R["Receiver<br/>parse · validate · batch"]
+    R --> DB[("MySQL 8.4<br/>TLS")]
+    API["FastAPI<br/>tokens + roles"] --> DB
+    API -- "commands,<br/>firmware" --> B
+    N["nginx + React dashboard<br/>HTTPS, strict CSP"] -- /api --> API
+    U(["Browser"]) -- HTTPS --> N
 ```
+
+Components, message flows, security boundaries and the deployment view: **[architecture](docs/architecture/architecture.md)**.
 
 ## Tech stack
 
@@ -83,6 +91,7 @@ Currently: **all phases are complete** (0–19). A one-page summary for presenti
 ## Documentation
 
 - [Final QA report](docs/testing/final-report.md)
+- [Project brief](docs/project-brief.md)
 - [Development setup](docs/development/setup.md)
 - [Requirements](docs/requirements/requirements.md)
 - [Architecture](docs/architecture/architecture.md)
@@ -100,6 +109,7 @@ Currently: **all phases are complete** (0–19). A one-page summary for presenti
 - [Sensor commands](docs/architecture/commands.md)
 - [Firmware over the air](docs/architecture/fota.md)
 - [Reliability and failure injection](docs/testing/reliability.md)
-- [Security](docs/security/security.md)
+- [Security](docs/security/security.md) and [TLS](docs/security/tls.md)
+- [Deployment guide](docs/deployment.md)
 - [Performance](docs/testing/performance.md)
 - [AI QA assistant](docs/testing/ai-qa-assistant.md)

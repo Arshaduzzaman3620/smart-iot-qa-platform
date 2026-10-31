@@ -37,7 +37,7 @@ This mirrors how quality-focused teams deliver software: small, verified increme
 
 | Area | Result |
 |---|---|
-| Automated tests | **813 tests** across 7 levels, from single functions to the full system in a real browser; all passing |
+| Automated tests | **816 tests** across 7 levels, from single functions to the full system in a real browser; all passing |
 | Requirements | **11 of 11** requirements traced to the tests that prove them |
 | Defects | **41 defects** found and fixed during development, each now guarded by a test |
 | Reliability | **No data lost or duplicated** when the database, message broker or data receiver failed during operation |

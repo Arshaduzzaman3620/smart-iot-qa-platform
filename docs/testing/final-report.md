@@ -6,7 +6,7 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 
 | | |
 |---|---|
-| Automated tests | **813**, in 7 layers, all passing ([inventory](#test-inventory)) |
+| Automated tests | **816**, in 7 layers, all passing ([inventory](#test-inventory)) |
 | Requirements | **11 of 11** functional requirements implemented and covered by tests ([traceability](#requirements-traceability)) |
 | Defects found and fixed | **41** across the phases, each with a test that now guards it ([defect log](#defect-log)) |
 | Reliability | 0 readings lost, 0 stored twice, through MySQL, broker and receiver outages ([reliability.md](reliability.md)) |
@@ -19,7 +19,7 @@ SmartIoT Sensor Quality Engineering Platform, release candidate after Phase 16 (
 
 | Layer | Tests | What it proves | Needs |
 |---|---|---|---|
-| unit | 333 | Parser, validator (every boundary ±0.01), generator, alert rules, batch writer (outage hold, acks), passwords and tokens, FOTA device logic, command parsing, fault injector, rate limiter, middleware, AI QA assistant, certificates and HTTPS downloads, production check | nothing |
+| unit | 336 | Parser, validator (every boundary ±0.01), generator, alert rules, batch writer (outage hold, acks), passwords and tokens, FOTA device logic, command parsing, fault injector, rate limiter, middleware, AI QA assistant, certificates and HTTPS downloads, production check | nothing |
 | api | 288 | Every endpoint: success, boundaries, 401/403 by role, 404/409/413/422/429/503, hostile input, headers, firmware tokens | MySQL |
 | mqtt | 28 | Broker round trip, wildcards, ordering, **ACLs per account**, **TLS listener** (certificate, host name, TLS 1.1 refused) | broker |
 | integration | 56 | Real receiver process: storage, rejection, alerts, offline detection, batching, commands, firmware progress, status messages | broker + MySQL |
@@ -107,7 +107,7 @@ Every defect below was found by a test, a manual check or a measurement while bu
 
 | Check | Result |
 |---|---|
-| **Phase 19 (2026-10-31): full suite** | **813 / 813 passed** (4 min 45 s) |
+| **Phase 19 (2026-10-31): full suite** | **816 / 816 passed** (4 min 50 s) |
 | **Phase 19: upgrade of the existing dev database** | migration applied on `init-db`, all existing accounts ACTIVE, admin sign-in unchanged |
 | **Phase 19: mutation check** | Letting a switched-off account sign in, or keeping sessions after a reset, failed the matching tests |
 | **Phase 18 (2026-10-31): full suite** | **762 / 762 passed** (4 min 30 s), after the full run caught defect #39 |
@@ -127,7 +127,7 @@ The first `docker compose up` of the fresh install failed instantly once, with i
 
 ```bash
 docker compose up -d --build                                    # the platform, https://localhost:8443 (admin / admin-dev-password)
-docker compose -f compose.test.yaml run --rm --build tests       # all 813 tests
+docker compose -f compose.test.yaml run --rm --build tests       # all 816 tests
 docker compose --profile perf run --rm k6 run -e PROFILE=load /scripts/api.js
 docker compose -f compose.test.yaml run --rm tests python scripts/scale_check.py --sensors 100 --interval 1 --duration 30
 ```

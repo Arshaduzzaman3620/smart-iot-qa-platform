@@ -63,6 +63,8 @@ services:
       API_MQTT_PASSWORD: ${API_MQTT_PASSWORD:-api-dev-password}
       # Test-harness account (runs pytest from the host against this broker). Empty = not created.
       QA_MQTT_PASSWORD: ${QA_MQTT_PASSWORD:-qa-dev-password}
+      # production = refuse the dev passwords above and never create the qa account (entrypoint.sh).
+      APP_ENV: ${APP_ENV:-development}
     ports:
       - "127.0.0.1:${MQTT_PORT:-1883}:1883"
       - "${MQTTS_PORT:-8883}:8883"

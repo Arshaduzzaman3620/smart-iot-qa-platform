@@ -1,9 +1,9 @@
-"""Outgoing email (Phase 19): password resets, approvals, sign-up notices to admins.
+"""Outgoing email (Phase 19): welcome emails for new accounts, password resets.
 
 Sent over SMTP from a background task, so the HTTP answer never waits for the mail server and its
 timing doesn't reveal whether an address exists. In Compose the server is Mailpit, a local inbox at
 http://localhost:8025 (nothing leaves the machine). Failures are logged, never raised: a down mail server
-must not break sign-up. The message body is never logged, because a reset link in it is a password.
+must not break the request that sent it. The message body is never logged, because a reset link in it is a password.
 """
 
 import logging

@@ -8,6 +8,8 @@ import http.server
 import importlib.util
 import os
 import ssl
+import subprocess
+import sys
 import threading
 
 import pytest
@@ -173,6 +175,7 @@ def test_a_complete_production_configuration_passes():
     ({"MQTT_TLS_CA": ""}, "MQTT_TLS_CA"),
     ({"MYSQL_SSL_CA": ""}, "MYSQL_SSL_CA"),
     ({"SMTP_HOST": ""}, "SMTP_HOST"),
+    ({"SMTP_HOST": "mailpit"}, "SMTP_HOST"),
     ({"APP_BASE_URL": "http://iot.example.com"}, "APP_BASE_URL"),
 ])
 def test_each_development_setting_is_reported(change, problem):
@@ -195,3 +198,28 @@ def test_api_refuses_to_start_in_production_with_dev_settings(monkeypatch):
     with pytest.raises(RuntimeError, match="APP_ENV=production"):
         with TestClient(app):
             pass
+
+
+ENTRYPOINT = ROOT / "docker" / "mosquitto" / "entrypoint.sh"
+
+
+def run_broker_entrypoint(**env):
+    return subprocess.run(["sh", str(ENTRYPOINT)], env={"PATH": os.environ["PATH"], **env},
+                          capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
+
+
+def test_broker_refuses_dev_passwords_in_production():
+    result = run_broker_entrypoint(APP_ENV="production", SENSOR_MQTT_PASSWORD="sensor-dev-password",
+                                   RECEIVER_MQTT_PASSWORD="a-real-one", API_MQTT_PASSWORD="")
+    assert result.returncode == 1
+    assert "SENSOR_MQTT_PASSWORD" in result.stderr and "API_MQTT_PASSWORD" in result.stderr
+    assert "RECEIVER_MQTT_PASSWORD" not in result.stderr
+
+
+def test_api_docs_are_off_in_production():
+    # A fresh interpreter: the app object is built at import time.
+    code = ("from backend.app.main import app; "
+            "print(app.docs_url, app.redoc_url, app.openapi_url)")
+    shown = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env={**os.environ, "APP_ENV": "production"},
+                           capture_output=True, text=True, timeout=60)
+    assert shown.stdout.split() == ["None", "None", "None"], shown.stderr
