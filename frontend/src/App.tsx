@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, AuthError, fetchActiveAlerts, fetchSensors, setToken } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { FirmwareLibrary } from "./components/FirmwareLibrary";
+import { BellIcon, ChipIcon, DevicesIcon, GridIcon, LogoutIcon, Logo } from "./components/Icons";
 import { LoginForm } from "./components/LoginForm";
+import { Overview } from "./components/Overview";
 import { SensorDetails } from "./components/SensorDetails";
 import { SensorTable } from "./components/SensorTable";
 import { clearSession, hasRole, loadSession, saveSession } from "./session";
@@ -34,25 +36,46 @@ export default function App() {
     setSession(null);
   }, []);
 
+  if (!session) return <LoginForm onLogin={signIn} notice={notice} />;
+
   return (
-    <main>
-      <header className="top">
-        <h1>SmartIoT Sensors</h1>
-        {session && (
-          <div className="user" data-testid="user-menu">
-            <span data-testid="user-name">{session.user.username}</span>
-            <span className="badge" data-testid="user-role">{session.user.role}</span>
-            <button type="button" className="link" onClick={() => signOut()} data-testid="logout">Sign out</button>
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <Logo />
+          <div>
+            <h1>SmartIoT</h1>
+            <span className="brand-sub">Home control center</span>
           </div>
-        )}
-      </header>
-      {session ? (
+        </div>
+        <nav className="nav" aria-label="Sections">
+          <a href="#overview"><GridIcon /> Overview</a>
+          <a href="#devices"><DevicesIcon /> Devices</a>
+          <a href="#alerts"><BellIcon /> Alerts</a>
+          <a href="#firmware"><ChipIcon /> Firmware</a>
+        </nav>
+        <div className="user" data-testid="user-menu">
+          <span className="avatar" aria-hidden="true">{session.user.username.slice(0, 1).toUpperCase()}</span>
+          <div className="user-text">
+            <span className="user-name" data-testid="user-name">{session.user.username}</span>
+            <span className="badge badge-role" data-testid="user-role">{session.user.role}</span>
+          </div>
+          <button type="button" className="icon-button" onClick={() => signOut()} data-testid="logout"
+                  title="Sign out">
+            <LogoutIcon /><span className="sr-only">Sign out</span>
+          </button>
+        </div>
+      </aside>
+      <main className="content">
         <Dashboard session={session} onAuthError={(err) => signOut(err.message)} />
-      ) : (
-        <LoginForm onLogin={signIn} notice={notice} />
-      )}
-    </main>
+      </main>
+    </div>
   );
+}
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  return hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
 interface DashboardProps {
@@ -116,13 +139,22 @@ function Dashboard({ session, onAuthError }: DashboardProps) {
 
   return (
     <>
-      <p className="meta status-line" data-testid="last-updated">
-        {updatedAt
-          ? `Updated ${new Date(updatedAt).toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
-          : error
-            ? "Not connected"
-            : "Loading…"}
-      </p>
+      <header className="page-head" id="overview">
+        <div>
+          <h2 className="greeting">{greeting()}, {session.user.username}</h2>
+          <p className="meta">Here is what is happening across your home.</p>
+        </div>
+        <span className={`live ${error ? "live-down" : updatedAt ? "live-up" : ""}`}>
+          <span className="live-dot" aria-hidden="true" />
+          <span data-testid="last-updated">
+            {updatedAt
+              ? `Updated ${new Date(updatedAt).toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
+              : error
+                ? "Not connected"
+                : "Loading…"}
+          </span>
+        </span>
+      </header>
 
       {error && (
         <div role="alert" className="error" data-testid="error-banner">
@@ -130,7 +162,9 @@ function Dashboard({ session, onAuthError }: DashboardProps) {
         </div>
       )}
 
-      {alerts && <AlertsPanel alerts={alerts} now={now} />}
+      {sensors && <Overview sensors={sensors} alerts={alerts} />}
+
+      <div id="alerts" className="anchor">{alerts && <AlertsPanel alerts={alerts} now={now} />}</div>
 
       {selectedSensor && (
         <SensorDetails
@@ -144,13 +178,21 @@ function Dashboard({ session, onAuthError }: DashboardProps) {
         />
       )}
 
-      {sensors === null ? (
-        !error && <p className="empty" data-testid="loading">Loading sensors…</p>
-      ) : (
-        <SensorTable sensors={sensors} now={now} selected={selected} onSelect={setSelected} />
-      )}
+      <section className="panel" id="devices" aria-labelledby="devices-heading">
+        <div className="panel-head">
+          <h2 id="devices-heading">Devices</h2>
+          {sensors && <span className="meta">{sensors.length} total · select one for details</span>}
+        </div>
+        {sensors === null ? (
+          !error && <p className="empty" data-testid="loading">Loading sensors…</p>
+        ) : (
+          <SensorTable sensors={sensors} now={now} selected={selected} onSelect={setSelected} />
+        )}
+      </section>
 
-      <FirmwareLibrary now={now} canUpload={hasRole(session, "ADMIN")} onAuthError={handleAuthError} />
+      <div id="firmware" className="anchor">
+        <FirmwareLibrary now={now} canUpload={hasRole(session, "ADMIN")} onAuthError={handleAuthError} />
+      </div>
     </>
   );
 }

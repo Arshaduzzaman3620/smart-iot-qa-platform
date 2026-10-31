@@ -1,5 +1,6 @@
 import { formatNumber, formatRelative } from "../format";
 import type { Sensor } from "../types";
+import { DevicesIcon } from "./Icons";
 
 const LOW_BATTERY = 20;
 
@@ -39,16 +40,28 @@ export function SensorTable({ sensors, now, selected, onSelect }: Props) {
             return (
               <tr key={sensor.sensor_id} data-testid={`sensor-row-${sensor.sensor_id}`}
                   className={sensor.sensor_id === selected ? "selected" : undefined}>
-                <td className="mono">
-                  <button type="button" className="link mono" data-testid="sensor-id"
-                          aria-pressed={sensor.sensor_id === selected} onClick={() => onSelect(sensor.sensor_id)}>
-                    {sensor.sensor_id}
-                  </button>
+                <td>
+                  <div className="device-cell">
+                    <span className={`device-icon device-${sensor.status.toLowerCase()}`}><DevicesIcon size={18} /></span>
+                    <div className="device-text">
+                      <button type="button" className="link mono device-id" data-testid="sensor-id"
+                              aria-pressed={sensor.sensor_id === selected} onClick={() => onSelect(sensor.sensor_id)}>
+                        {sensor.sensor_id}
+                      </button>
+                      {(sensor.name || sensor.location) && (
+                        <span className="device-sub">{[sensor.name, sensor.location].filter(Boolean).join(" · ")}</span>
+                      )}
+                    </div>
+                  </div>
                 </td>
                 <td data-testid="temperature" className="num">{formatNumber(t?.temperature, "°C")}</td>
                 <td data-testid="humidity" className="num">{formatNumber(t?.humidity, "%")}</td>
                 <td data-testid="battery" className={lowBattery ? "num low" : "num"}>
                   {formatNumber(sensor.battery, "%")}
+                  {sensor.battery != null && (
+                    <meter className="battery-meter" min={0} max={100} low={LOW_BATTERY} high={50} optimum={100}
+                           value={sensor.battery} aria-hidden="true" />
+                  )}
                 </td>
                 <td>
                   <span data-testid="status" className={`badge badge-${sensor.status.toLowerCase()}`}>

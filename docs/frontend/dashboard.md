@@ -2,6 +2,15 @@
 
 React 18 + TypeScript app built with Vite, in [frontend/](../../frontend/).
 
+## Design
+
+A smart-home control center: a sidebar (brand, section links, the signed-in user) that becomes a top bar below 900 px, a greeting with a live-connection indicator, and overview tiles computed from the sensor list (devices online, average temperature and humidity, active alerts, low battery). Devices are a table with status dots and battery bars; selecting one opens a detail card with reading tiles, a temperature and humidity trend chart (plain SVG), the history table, and the device's commands, firmware and alerts.
+
+- **No extra dependencies:** icons are inline SVG ([Icons.tsx](../../frontend/src/components/Icons.tsx)), fonts are the system's, the chart is hand-drawn SVG. So the strict Content-Security-Policy needs no exceptions.
+- **Light and dark** themes follow the operating system (design tokens at the top of [styles.css](../../frontend/src/styles.css)).
+- **Phone width:** two tiles per row, the table scrolls inside its card, long names are shortened with "…", and the page never scrolls sideways (checked by a UI test).
+- Test hooks (`data-testid`), texts and badge classes are unchanged, so all UI and end-to-end tests run against the new design as before.
+
 ## Running it
 
 ```bash
